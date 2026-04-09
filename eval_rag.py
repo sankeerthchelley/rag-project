@@ -1,20 +1,16 @@
 import os
 import json
-import pandas as pd
+import time
 from dotenv import load_dotenv
-from datasets import Dataset
-
-# Import the RAG logic from app.py
+from google import genai
 from app import search, generate_answer
-
-# Ragas evaluation imports
-from ragas import evaluate
-from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall
-from langchain_google_genai import ChatGoogleGenerativeAI
 
 load_dotenv()
 
-# 1. Define Test Set (Questions that should be in the KB)
+# Initialize Gemini Client (already used in app.py)
+gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+
+# 1. Define Test Set
 test_questions = [
     "What is GEOSherpa in Hushly?",
     "How do I upload an asset to the platform?",
@@ -22,71 +18,86 @@ test_questions = [
     "What is the difference between a Stream and a Hub?",
     "How does Hushly handle ABM (Account-Based Marketing)?",
     "What are UTM parameters used for in Hushly?",
-    "Can you explain what GEOSherpa means?",
-    "How do I configure SSO in Hushly?",
-    "What is the role of a CSM in Hushly?",
-    "Define what an Asset is in the platform."
+    "What is the role of a CSM in Hushly?"
 ]
 
+EVAL_RUBRIC = """
+You are an expert AI grader. Evaluate the "Answer" based on the provided "Context" and "Question".
+Return a JSON object with scores (1-5) and reasoning for the following criteria:
+
+1. Faithfulness: Is the answer derived ONLY from the context? (1 = hallucinating, 5 = perfectly grounded)
+2. Relevance: Does the answer address the user question accurately? (1 = irrelevant, 5 = perfect)
+
+JSON Format:
+{
+  "faithfulness": { "score": 5, "reasoning": "..." },
+  "relevance": { "score": 5, "reasoning": "..." }
+}
+"""
+
+def evaluate_answer(question, context, answer):
+    prompt = f"""{EVAL_RUBRIC}
+
+Context:
+{context}
+
+Question: {question}
+Answer: {answer}
+"""
+    try:
+        response = gemini_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config={"response_mime_type": "application/json"}
+        )
+        return json.loads(response.text)
+    except Exception as e:
+        print(f"  [ERROR] Evaluation failed for this question: {e}")
+        return None
+
 def run_evaluation():
-    print(f"--- Starting RAG Evaluation Over {len(test_questions)} Questions ---")
+    print(f"--- Starting Lightweight RAG Evaluation Over {len(test_questions)} Questions ---")
+    print("--- (Python 3.14 Compatible - Dependency Free) ---")
     
-    data = {"question": [], "answer": [], "contexts": [], "ground_truth": []}
+    results_list = []
 
     for query in test_questions:
-        print(f"[QUERY] {query}")
+        print(f"\n[QUERY] {query}")
         
-        # Run the actual RAG pipeline
-        results = search(query)
-        answer, _ = generate_answer(query, results)
+        # 1. Search & Generate (Production code)
+        retrieved = search(query)
+        context_text = "\n---\n".join([r['context'] for r in retrieved])
+        answer, model_used = generate_answer(query, retrieved)
         
-        # Format contexts (list of strings)
-        contexts = [r['context'] for r in results]
+        print(f"  [BOT] {answer[:100]}...")
+
+        # 2. Evaluate with Gemini Judge
+        print("  [JUDGE] Evaluating...")
+        eval_result = evaluate_answer(query, context_text, answer)
         
-        data["question"].append(query)
-        data["answer"].append(answer)
-        data["contexts"].append(contexts)
-        data["ground_truth"].append("") # Optional: can be filled if we have gold answers
+        if eval_result:
+            print(f"  [SCORE] Faithfulness: {eval_result['faithfulness']['score']}/5 | Relevance: {eval_result['relevance']['score']}/5")
+            eval_result['question'] = query
+            eval_result['answer'] = answer
+            eval_result['model_used'] = model_used
+            results_list.append(eval_result)
+        
+        time.sleep(1) # Rate limit safety
 
-    # 2. Convert to HuggingFace Dataset
-    dataset = Dataset.from_dict(data)
-
-    # 3. Setup Gemini as the Evaluator LLM (via LangChain)
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
-        google_api_key=os.getenv("GEMINI_API_KEY")
-    )
-
-    # 4. Run Ragas Evaluation
-    print("--- Running Ragas Metrics (Faithfulness, Relevance, Context Quality) ---")
-    result = evaluate(
-        dataset=dataset,
-        metrics=[
-            faithfulness,
-            answer_relevancy,
-            context_precision,
-            context_recall,
-        ],
-        llm=llm
-    )
-
-    # 5. Output Results
-    df = result.to_pandas()
-    print("\n--- EVALUATION RESULTS ---")
-    print(df[["question", "faithfulness", "answer_relevancy", "context_precision", "context_recall"]])
-    
-    avg_scores = df.mean(numeric_only=True)
-    print("\n--- AVERAGE SCORES ---")
-    print(avg_scores)
-    
-    # Save to CSV for the user
-    df.to_csv("rag_eval_results.csv", index=False)
-    print("\n✅ Results saved to 'rag_eval_results.csv'")
+    # 3. Summary
+    if results_list:
+        avg_faith = sum(r['faithfulness']['score'] for r in results_list) / len(results_list)
+        avg_rel = sum(r['relevance']['score'] for r in results_list) / len(results_list)
+        
+        print("\n" + "="*40)
+        print("AVERAGE PERFORMANCE SCORES")
+        print(f"Faithfulness: {avg_faith:.2f} / 5.0")
+        print(f"Relevance:    {avg_rel:.2f} / 5.0")
+        print("="*40)
+        
+        with open("rag_eval_results.json", "w") as f:
+            json.dump(results_list, f, indent=2)
+        print("✅ Detailed results saved to 'rag_eval_results.json'")
 
 if __name__ == "__main__":
-    try:
-        run_evaluation()
-    except Exception as e:
-        print(f"❌ Evaluation failed: {e}")
-        import traceback
-        traceback.print_exc()
+    run_evaluation()

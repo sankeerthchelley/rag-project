@@ -7,8 +7,4 @@ google-genai
 groq
 python-dotenv
 gunicorn
-ragas
-datasets
-langchain-google-genai
-tiktoken
 
