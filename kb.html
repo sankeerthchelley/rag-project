@@ -1063,10 +1063,14 @@
     window.speechSynthesis?.onvoiceschanged?.();
 
     // ── CHAT LOGIC ──
-    function fillInput(btn) { inputEl.value = btn.textContent; inputEl.focus(); }
+    function fillInput(btn) { 
+      inputEl.value = btn.textContent; 
+      inputEl.focus(); 
+      send(); // Enable auto-send for suggestion chips as well
+    }
     function hideEmpty() { if (emptyState) emptyState.style.display = "none"; }
     function scroll() { messagesEl.scrollTop = messagesEl.scrollHeight; }
-    function escHtml(str) { return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    function escHtml(str) { return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); }
 
     function addUserMsg(text) {
       hideEmpty();
