@@ -80,25 +80,34 @@ def run_evaluation():
     for query in test_questions:
         print(f"\n[QUERY] {query}")
         
-        # 1. Search & Generate (Production code)
-        retrieved = search(query)
-        context_text = "\n---\n".join([r['context'] for r in retrieved])
-        answer, model_used = generate_answer(query, retrieved)
-        
-        print(f"  [BOT] {answer[:100]}...")
+        try:
+            # 1. Search & Generate (Production code)
+            retrieved = search(query)
+            
+            # Trim context to save tokens during eval if needed
+            context_text = "\n---\n".join([r['context'] for r in retrieved[:2]]) 
+            
+            answer, model_used = generate_answer(query, retrieved)
+            print(f"  [BOT] {answer[:100]}...")
 
-        # 2. Evaluate with AI Judge
-        print("  [JUDGE] Evaluating...")
-        eval_result = evaluate_answer(query, context_text, answer)
+            # 2. Evaluate with AI Judge
+            print("  [JUDGE] Evaluating...")
+            eval_result = evaluate_answer(query, context_text, answer)
+            
+            if eval_result:
+                print(f"  [SCORE] Faithfulness: {eval_result['faithfulness']['score']}/5 | Relevance: {eval_result['relevance']['score']}/5")
+                eval_result['question'] = query
+                eval_result['answer'] = answer
+                eval_result['model_used'] = model_used
+                results_list.append(eval_result)
         
-        if eval_result:
-            print(f"  [SCORE] Faithfulness: {eval_result['faithfulness']['score']}/5 | Relevance: {eval_result['relevance']['score']}/5")
-            eval_result['question'] = query
-            eval_result['answer'] = answer
-            eval_result['model_used'] = model_used
-            results_list.append(eval_result)
+        except Exception as e:
+            if "RateLimitError" in str(type(e)) or "429" in str(e):
+                print(f"  [SKIP] Rate limit reached for both services. Skipping this question. Detail: {str(e)[:100]}...")
+            else:
+                print(f"  [ERROR] Something went wrong: {e}")
         
-        time.sleep(2) # Increased sleep for free tier stability
+        time.sleep(3) # Even more delay for stability
 
     # 3. Summary
     if results_list:
