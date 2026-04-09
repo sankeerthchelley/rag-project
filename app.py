@@ -185,14 +185,17 @@ def ask():
         if not query:
             return jsonify({"error": "Query cannot be empty"}), 400
 
-        # Query Reformulation: If there is history, rewrite the query to be standalone
+        # Query Reformulation: Use only the last 3 turns for context stability
         search_query = query
         if history:
             try:
-                history_text = "\n".join([f"{msg['role'].capitalize()}: {msg['content']}" for msg in history])
+                # User asked specifically for last 3 turns
+                context_history = history[-3:] 
+                history_text = "\n".join([f"{msg['role'].capitalize()}: {msg['content']}" for msg in context_history])
+                
                 rewrite_prompt = f"""Given the conversation history below, rewrite the user's latest follow-up question into a standalone, fully contextualized question. Do not answer it, just rewrite it so it can be used for a database search keyword lookup. Output ONLY the standalone question.
 
-Conversation History:
+Conversation History (Latest Turns):
 {history_text}
 
 Latest raw question: {query}
@@ -233,8 +236,9 @@ Standalone question:"""
             "answer":     answer,
             "model_used": model_used,
             "no_info":    False,
-            "sources":    list(dict.fromkeys(r["source"] for r in results)),
-            "titles":     list(dict.fromkeys(r["title"]  for r in results)),
+            "sources":    [r['context'] for r in results],
+            "titles":     [r['title'] for r in results],
+            "recommendations": recommendations
         })
 
     except Exception as e:

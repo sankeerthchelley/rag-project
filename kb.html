@@ -1051,8 +1051,8 @@
       scroll();
     }
 
-    // ── addBotMsg now accepts titles + modelUsed ──
-    function addBotMsg(text, sources = [], titles = [], modelUsed = "") {
+    // ── addBotMsg now accepts recommendations ──
+    function addBotMsg(text, sources = [], titles = [], modelUsed = "", recommendations = []) {
       hideEmpty();
       const msg = document.createElement("div");
       msg.className = "msg bot";
@@ -1062,8 +1062,7 @@
         ? `<span class="model-badge ${modelUsed.toLowerCase()}">${modelUsed}</span>`
         : "";
 
-      // Sources — use title as link text if available, else shorten URL
-      // Limit to max 3 links
+      // Sources
       let srcHtml = "";
       const shownSources = sources.slice(0, 3);
       if (shownSources.length) {
@@ -1074,15 +1073,34 @@
         srcHtml = `<div class="sources"><div class="sources-title">Sources</div>${links}</div>`;
       }
 
+      // Recommendations / Ambiguity Options
+      let recHtml = "";
+      if (recommendations && recommendations.length) {
+        const btns = recommendations.map(opt => 
+          `<button class="opt-btn" onclick="sendOption('${escHtml(opt)}')">
+            <i data-lucide="message-square" style="width:14px;height:14px"></i>
+            ${escHtml(opt)}
+          </button>`
+        ).join("");
+        recHtml = `<div class="recommendations">${btns}</div>`;
+      }
+
       msg.innerHTML = `
       <div class="msg-label-row">
         <span class="msg-label">Assistant</span>
         ${badgeHtml}
       </div>
       <div class="bubble">${marked.parse(text)}</div>
-      ${srcHtml}`;
+      ${srcHtml}
+      ${recHtml}`;
       messagesEl.appendChild(msg);
+      lucide.createIcons(); // Refresh icons for new buttons
       scroll();
+    }
+
+    function sendOption(opt) {
+      inputEl.value = opt;
+      send();
     }
 
     // ── Fallback links shown when no info found in KB ──
@@ -1243,7 +1261,7 @@
           chatHistory.push({ role: "assistant", content: "I don't have that information in the knowledge base." });
         } else {
           // Normal KB answer
-          addBotMsg(data.answer, data.sources || [], data.titles || [], data.model_used || "");
+          addBotMsg(data.answer, data.sources || [], data.titles || [], data.model_used || "", data.recommendations || []);
           chatHistory.push({ role: "user", content: query });
           chatHistory.push({ role: "assistant", content: data.answer });
 
