@@ -131,7 +131,10 @@ def generate_answer(query, results):
         context_blocks.append(block)
     context = "\n\n---\n\n".join(context_blocks)
 
-    # Re-read prompt.txt on every request — changes take effect instantly, no restart needed
+    # Trim context to ~3000 tokens max (approx 12,000 characters) to save costs/quota
+    context = context[:12000]
+    
+    # Re-read prompt.txt on every request
     with open("prompt.txt", "r", encoding="utf-8") as f:
         prompt_template = f.read()
     prompt = prompt_template.replace("{context}", context).replace("{query}", query)
@@ -145,9 +148,10 @@ def generate_answer(query, results):
         return response.text, "gemini"
 
     except Exception as e:
-        print(f"[WARN] Gemini failed: {e} — falling back to Groq")
+        print(f"[WARN] Gemini failed: {e} — falling back to Groq (Llama 8B)")
+        # Switching to llama-3.1-8b-instant which has MUCH higher rate limits than the 70B model
         completion = groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}]
         )
         return completion.choices[0].message.content, "groq"
