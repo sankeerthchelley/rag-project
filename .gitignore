@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env
+
+# Project specific
+faiss_index.bin
+faiss_texts.pkl
+
+# OS specific
+.DS_Store
+Thumbs.db

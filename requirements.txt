@@ -1,0 +1,8 @@
+flask
+flask-cors
+faiss-cpu
+numpy
+sentence-transformers
+google-genai
+groq
+python-dotenv
