@@ -181,6 +181,7 @@ def ask():
 
         query = body["query"].strip()
         history = body.get("history", [])
+        recommendations = [] # Fixed: Always initialize core variables at top
 
         if not query:
             return jsonify({"error": "Query cannot be empty"}), 400
@@ -236,8 +237,8 @@ Standalone question:"""
             "answer":     answer,
             "model_used": model_used,
             "no_info":    False,
-            "sources":    [r['context'] for r in results],
-            "titles":     [r['title'] for r in results],
+            "sources":    list(dict.fromkeys(r["source"] for r in results)),
+            "titles":     list(dict.fromkeys(r["title"]  for r in results)),
             "recommendations": recommendations
         })
 
