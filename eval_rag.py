@@ -3,12 +3,14 @@ import json
 import time
 from dotenv import load_dotenv
 from google import genai
+from groq import Groq
 from app import search, generate_answer
 
 load_dotenv()
 
-# Initialize Gemini Client (already used in app.py)
+# Initialize Clients
 gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 # 1. Define Test Set
 test_questions = [
@@ -44,6 +46,7 @@ Context:
 Question: {question}
 Answer: {answer}
 """
+    # Try Gemini first
     try:
         response = gemini_client.models.generate_content(
             model="gemini-2.0-flash",
@@ -52,8 +55,21 @@ Answer: {answer}
         )
         return json.loads(response.text)
     except Exception as e:
-        print(f"  [ERROR] Evaluation failed for this question: {e}")
-        return None
+        if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+            print("  [JUDGE] Gemini quota exceeded, falling back to Groq...")
+            try:
+                response = groq_client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object"}
+                )
+                return json.loads(response.choices[0].message.content)
+            except Exception as ge:
+                print(f"  [ERROR] Both Gemini and Groq evaluation failed: {ge}")
+                return None
+        else:
+            print(f"  [ERROR] Evaluation failed: {e}")
+            return None
 
 def run_evaluation():
     print(f"--- Starting Lightweight RAG Evaluation Over {len(test_questions)} Questions ---")
@@ -71,7 +87,7 @@ def run_evaluation():
         
         print(f"  [BOT] {answer[:100]}...")
 
-        # 2. Evaluate with Gemini Judge
+        # 2. Evaluate with AI Judge
         print("  [JUDGE] Evaluating...")
         eval_result = evaluate_answer(query, context_text, answer)
         
@@ -82,7 +98,7 @@ def run_evaluation():
             eval_result['model_used'] = model_used
             results_list.append(eval_result)
         
-        time.sleep(1) # Rate limit safety
+        time.sleep(2) # Increased sleep for free tier stability
 
     # 3. Summary
     if results_list:
