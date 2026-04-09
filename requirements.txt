@@ -6,3 +6,5 @@ sentence-transformers
 google-genai
 groq
 python-dotenv
+gunicorn
+
