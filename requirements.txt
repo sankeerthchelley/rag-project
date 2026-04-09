@@ -10,4 +10,5 @@ gunicorn
 ragas
 datasets
 langchain-google-genai
+tiktoken
 
