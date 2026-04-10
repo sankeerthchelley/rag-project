@@ -1,0 +1,627 @@
+{
+  "nodes": [
+    {
+      "id": "app",
+      "label": "app.py",
+      "file_type": "code",
+      "source_file": "app.py",
+      "source_location": "L1"
+    },
+    {
+      "id": "app_search",
+      "label": "search()",
+      "file_type": "code",
+      "source_file": "app.py",
+      "source_location": "L86"
+    },
+    {
+      "id": "app_generate_answer",
+      "label": "generate_answer()",
+      "file_type": "code",
+      "source_file": "app.py",
+      "source_location": "L126"
+    },
+    {
+      "id": "app_home",
+      "label": "home()",
+      "file_type": "code",
+      "source_file": "app.py",
+      "source_location": "L159"
+    },
+    {
+      "id": "app_health",
+      "label": "health()",
+      "file_type": "code",
+      "source_file": "app.py",
+      "source_location": "L163"
+    },
+    {
+      "id": "app_ask",
+      "label": "ask()",
+      "file_type": "code",
+      "source_file": "app.py",
+      "source_location": "L172"
+    },
+    {
+      "id": "app_enhance",
+      "label": "enhance()",
+      "file_type": "code",
+      "source_file": "app.py",
+      "source_location": "L242"
+    },
+    {
+      "id": "app_generate_steps",
+      "label": "generate_steps()",
+      "file_type": "code",
+      "source_file": "app.py",
+      "source_location": "L299"
+    },
+    {
+      "id": "eval_rag",
+      "label": "eval_rag.py",
+      "file_type": "code",
+      "source_file": "eval_rag.py",
+      "source_location": "L1"
+    },
+    {
+      "id": "eval_rag_evaluate_answer",
+      "label": "evaluate_answer()",
+      "file_type": "code",
+      "source_file": "eval_rag.py",
+      "source_location": "L40"
+    },
+    {
+      "id": "eval_rag_run_evaluation",
+      "label": "run_evaluation()",
+      "file_type": "code",
+      "source_file": "eval_rag.py",
+      "source_location": "L74"
+    },
+    {
+      "id": "rag",
+      "label": "rag.py",
+      "file_type": "code",
+      "source_file": "rag.py",
+      "source_location": "L1"
+    },
+    {
+      "id": "rag_search",
+      "label": "search()",
+      "file_type": "code",
+      "source_file": "rag.py",
+      "source_location": "L90"
+    },
+    {
+      "id": "rag_generate_answer",
+      "label": "generate_answer()",
+      "file_type": "code",
+      "source_file": "rag.py",
+      "source_location": "L124"
+    },
+    {
+      "id": "run_graphify",
+      "label": "run_graphify.py",
+      "file_type": "code",
+      "source_file": "run_graphify.py",
+      "source_location": "L1"
+    },
+    {
+      "id": "run_graphify_run_command",
+      "label": "run_command()",
+      "file_type": "code",
+      "source_file": "run_graphify.py",
+      "source_location": "L5"
+    },
+    {
+      "id": "run_graphify_main",
+      "label": "main()",
+      "file_type": "code",
+      "source_file": "run_graphify.py",
+      "source_location": "L19"
+    },
+    {
+      "id": "script",
+      "label": "script.py",
+      "file_type": "code",
+      "source_file": "script.py",
+      "source_location": "L1"
+    },
+    {
+      "id": "script_get_text",
+      "label": "get_text()",
+      "file_type": "code",
+      "source_file": "script.py",
+      "source_location": "L21"
+    }
+  ],
+  "edges": [
+    {
+      "source": "app",
+      "target": "flask",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "json",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "faiss",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "numpy",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "os",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "pickle",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "sentence_transformers",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "google",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "groq",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "flask_cors",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "dotenv",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "app_search",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L86",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "app_generate_answer",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L126",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "app_home",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L159",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "app_health",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L163",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "app_ask",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L172",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "app_enhance",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L242",
+      "weight": 1.0
+    },
+    {
+      "source": "app",
+      "target": "app_generate_steps",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L299",
+      "weight": 1.0
+    },
+    {
+      "source": "app_ask",
+      "target": "app_search",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L209",
+      "weight": 1.0
+    },
+    {
+      "source": "app_ask",
+      "target": "app_generate_answer",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app.py",
+      "source_location": "L210",
+      "weight": 1.0
+    },
+    {
+      "source": "eval_rag",
+      "target": "os",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "eval_rag.py",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "eval_rag",
+      "target": "json",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "eval_rag.py",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "eval_rag",
+      "target": "time",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "eval_rag.py",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "eval_rag",
+      "target": "dotenv",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "eval_rag.py",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "eval_rag",
+      "target": "google",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "eval_rag.py",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "eval_rag",
+      "target": "groq",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "eval_rag.py",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "eval_rag",
+      "target": "app",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "eval_rag.py",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "eval_rag",
+      "target": "eval_rag_evaluate_answer",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "eval_rag.py",
+      "source_location": "L40",
+      "weight": 1.0
+    },
+    {
+      "source": "eval_rag",
+      "target": "eval_rag_run_evaluation",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "eval_rag.py",
+      "source_location": "L74",
+      "weight": 1.0
+    },
+    {
+      "source": "eval_rag_run_evaluation",
+      "target": "eval_rag_evaluate_answer",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "eval_rag.py",
+      "source_location": "L95",
+      "weight": 1.0
+    },
+    {
+      "source": "rag",
+      "target": "json",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "rag.py",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "rag",
+      "target": "faiss",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "rag.py",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "rag",
+      "target": "numpy",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "rag.py",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "rag",
+      "target": "os",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "rag.py",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "rag",
+      "target": "pickle",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "rag.py",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "rag",
+      "target": "sentence_transformers",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "rag.py",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "rag",
+      "target": "google",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "rag.py",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "rag",
+      "target": "groq",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "rag.py",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "rag",
+      "target": "dotenv",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "rag.py",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "rag",
+      "target": "rag_search",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "rag.py",
+      "source_location": "L90",
+      "weight": 1.0
+    },
+    {
+      "source": "rag",
+      "target": "rag_generate_answer",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "rag.py",
+      "source_location": "L124",
+      "weight": 1.0
+    },
+    {
+      "source": "run_graphify",
+      "target": "os",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "run_graphify.py",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "run_graphify",
+      "target": "subprocess",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "run_graphify.py",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "run_graphify",
+      "target": "sys",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "run_graphify.py",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "run_graphify",
+      "target": "run_graphify_run_command",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "run_graphify.py",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "run_graphify",
+      "target": "run_graphify_main",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "run_graphify.py",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "run_graphify_main",
+      "target": "run_graphify_run_command",
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "run_graphify.py",
+      "source_location": "L24",
+      "weight": 1.0
+    },
+    {
+      "source": "script",
+      "target": "langchain_community_document_loaders",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "script.py",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "script",
+      "target": "langchain_text_splitters",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "script.py",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "script",
+      "target": "requests",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "script.py",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "script",
+      "target": "bs4",
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "script.py",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "script",
+      "target": "re",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "script.py",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "script",
+      "target": "json",
+      "relation": "imports",
+      "confidence": "EXTRACTED",
+      "source_file": "script.py",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "script",
+      "target": "script_get_text",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "script.py",
+      "source_location": "L21",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0
+}

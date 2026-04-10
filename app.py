@@ -1,17 +1,33 @@
 from flask import Flask, request, jsonify, send_from_directory
 import json
-import faiss
-import numpy as np
 import os
-import pickle
-from sentence_transformers import SentenceTransformer
-from google import genai
-from groq import Groq
+import time
+import re
+import urllib.parse
+from datetime import datetime
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from dotenv import load_dotenv
 
+# Import from refactored core.py
+from core import (
+    search, 
+    generate_answer, 
+    check_llm_health,
+    response_cache,
+    should_use_cache,
+    get_cache_key,
+    log_request,
+    KB_VERSION,
+    KB_LAST_UPDATED,
+    KB_TOTAL_PARENTS,
+    KB_TOTAL_CHILDREN,
+    groq_client
+)
+
 # ─────────────────────────────────────────
-# LOAD ENV (keys from .env file, not hardcoded)
+# LOAD ENV
 # ─────────────────────────────────────────
 load_dotenv()
 
@@ -19,142 +35,36 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # ─────────────────────────────────────────
-# KEYS — now loaded from .env file safely
+# RATE LIMITING
 # ─────────────────────────────────────────
-gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-groq_client   = Groq(api_key=os.getenv("GROQ_API_KEY"))
-
-# ─────────────────────────────────────────
-# LOAD CHUNKS — children for search,
-#               parents dict for full context
-# ─────────────────────────────────────────
-with open("chunks_enterprise.json", "r", encoding="utf-8") as f:
-    data = json.load(f)
-
-children = [c for c in data.get("children", []) if not c.get("deprecated", False)]
-parents  = {p["chunk_id"]: p for p in data.get("parents", [])}
-
-child_texts   = [c.get("content", "") for c in children]
-child_sources = [c.get("source_url", "") for c in children]
-child_titles  = [c.get("title", "") for c in children]
-parent_ids    = [c.get("parent_chunk_id", "") for c in children]
-
-print(f"[LOAD] {len(children)} child chunks | {len(parents)} parent chunks")
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"]
+)
 
 # ─────────────────────────────────────────
-# EMBEDDINGS — load from disk if already
-# built, otherwise build and save to disk.
-# This means fast restarts after first run.
+# INPUT GUARDRAILS CONFIG
 # ─────────────────────────────────────────
-FAISS_INDEX_FILE  = "faiss_index.bin"
-FAISS_TEXTS_FILE  = "faiss_texts.pkl"
-EMBED_MODEL_NAME  = "all-MiniLM-L6-v2"
+INJECTION_BLOCKLIST = [
+    "ignore previous",
+    "forget instructions", 
+    "you are now",
+    "act as"
+]
+MAX_QUERY_LENGTH = 500
 
-model = SentenceTransformer(EMBED_MODEL_NAME)
+def sanitize_query(query: str) -> str:
+    """Strip and basic sanitize query."""
+    return query.strip()
 
-if os.path.exists(FAISS_INDEX_FILE) and os.path.exists(FAISS_TEXTS_FILE):
-    print("[FAISS] Loading saved index from disk — fast restart ✅")
-    index = faiss.read_index(FAISS_INDEX_FILE)
-    with open(FAISS_TEXTS_FILE, "rb") as f:
-        saved_meta = pickle.load(f)
-    # Verify saved index matches current chunks
-    if saved_meta.get("count") != len(child_texts):
-        print("[FAISS] Chunk count changed — rebuilding index...")
-        os.remove(FAISS_INDEX_FILE)
-        os.remove(FAISS_TEXTS_FILE)
-        index = None
-    else:
-        print(f"[FAISS] Index loaded — {index.ntotal} vectors ready")
-else:
-    index = None
-
-if index is None:
-    print("[FAISS] Building embeddings — this runs ONCE then saves to disk...")
-    embeddings = model.encode(child_texts, show_progress_bar=True)
-    embeddings = np.array(embeddings).astype("float32")
-    index = faiss.IndexFlatL2(embeddings.shape[1])
-    index.add(embeddings)
-    faiss.write_index(index, FAISS_INDEX_FILE)
-    with open(FAISS_TEXTS_FILE, "wb") as f:
-        pickle.dump({"count": len(child_texts)}, f)
-    print(f"[FAISS] Built and saved — {index.ntotal} vectors ✅")
-
-# ─────────────────────────────────────────
-# SEARCH — finds top child chunks,
-# then fetches their PARENT for full context
-# ─────────────────────────────────────────
-def search(query, k=15):
-    query_vec = model.encode([query]).astype("float32")
-    _, indices = index.search(query_vec, k)
-
-    results = []
-    seen_parent_ids = set()  # avoid duplicate parent context
-
-    for i in indices[0]:
-        if i < 0 or i >= len(children):
-            continue
-
-        child = children[i]
-        p_id  = child.get("parent_chunk_id", "")
-
-        # Get parent chunk for full context
-        parent = parents.get(p_id)
-
-        # Use parent content if available, else fall back to child
-        context_text = parent["content"] if parent else child["content"]
-        source       = child.get("source_url", "")
-        title        = child.get("title", "Hushly Docs")
-
-        # Deduplicate — don't add same parent twice
-        dedup_key = p_id or child["chunk_id"]
-        if dedup_key in seen_parent_ids:
-            continue
-        seen_parent_ids.add(dedup_key)
-
-        results.append({
-            "context": context_text,   # full parent = rich context for AI
-            "match":   child["content"],  # exact child match = what triggered it
-            "source":  source,
-            "title":   title,
-        })
-
-    return results
-
-# ─────────────────────────────────────────
-# GENERATE ANSWER
-# ─────────────────────────────────────────
-def generate_answer(query, results):
-    # Build context from full parent chunks
-    context_blocks = []
-    for r in results:
-        block = f"[{r['title']}]\n{r['context']}"
-        context_blocks.append(block)
-    context = "\n\n---\n\n".join(context_blocks)
-
-    # Trim context to ~3000 tokens max (approx 12,000 characters) to save costs/quota
-    context = context[:12000]
-    
-    # Re-read prompt.txt on every request
-    with open("prompt.txt", "r", encoding="utf-8") as f:
-        prompt_template = f.read()
-    prompt = prompt_template.replace("{context}", context).replace("{query}", query)
-
-    # Try Gemini first, fall back to Groq
-    try:
-        response = gemini_client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt
-        )
-        return response.text, "gemini"
-
-    except Exception as e:
-        print(f"[WARN] Gemini failed: {e} — falling back to Groq (Llama 8B)")
-        # Switching to llama-3.1-8b-instant which has MUCH higher rate limits than the 70B model
-        completion = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return completion.choices[0].message.content, "groq"
+def check_injection(query: str) -> tuple[bool, str]:
+    """Check for prompt injection attempts."""
+    query_lower = query.lower()
+    for block in INJECTION_BLOCKLIST:
+        if block in query_lower:
+            return False, f"Query contains blocked phrase: '{block}'"
+    return True, ""
 
 # ─────────────────────────────────────────
 # ROUTES
@@ -165,32 +75,63 @@ def home():
 
 @app.route("/health", methods=["GET"])
 def health():
+    # Check LLM health
+    llm_status = check_llm_health()
+    
     return jsonify({
         "status": "running",
-        "chunks_loaded": len(children),
-        "parents_loaded": len(parents),
-        "vectors_indexed": index.ntotal,
+        "kb_version": KB_VERSION,
+        "kb_last_updated": KB_LAST_UPDATED,
+        "kb_total_parents": KB_TOTAL_PARENTS,
+        "kb_total_children": KB_TOTAL_CHILDREN,
+        "llm_status": llm_status,
     }), 200
 
 @app.route("/ask", methods=["POST"])
+@limiter.limit("30 per minute")
 def ask():
+    start_time = time.time()
     try:
         body = request.json
         if not body or not body.get("query"):
             return jsonify({"error": "Query is missing or empty"}), 400
 
-        query = body["query"].strip()
+        query = body["query"]
         history = body.get("history", [])
-        recommendations = [] # Fixed: Always initialize core variables at top
+        recommendations = []
 
+        # Check query length
+        if len(query) > MAX_QUERY_LENGTH:
+            return jsonify({"error": f"Query exceeds maximum length of {MAX_QUERY_LENGTH} characters"}), 400
+
+        # Sanitize query
+        query = sanitize_query(query)
         if not query:
             return jsonify({"error": "Query cannot be empty"}), 400
+
+        # Check for injection
+        is_safe, error_msg = check_injection(query)
+        if not is_safe:
+            return jsonify({"error": error_msg}), 400
+
+        # Check cache (skip if personalized query with pronouns)
+        cache_key = get_cache_key(query)
+        if should_use_cache(query) and cache_key in response_cache:
+            cached = response_cache[cache_key]
+            return jsonify({
+                "answer": cached["answer"],
+                "model_used": cached.get("model_used", "cached"),
+                "no_info": cached.get("no_info", False),
+                "sources": cached.get("sources", []),
+                "titles": cached.get("titles", []),
+                "recommendations": recommendations,
+                "cached": True
+            })
 
         # Query Reformulation: Use only the last 3 turns for context stability
         search_query = query
         if history:
             try:
-                # User asked specifically for last 3 turns
                 context_history = history[-3:] 
                 history_text = "\n".join([f"{msg['role'].capitalize()}: {msg['content']}" for msg in context_history])
                 
@@ -209,38 +150,45 @@ Standalone question:"""
                     max_tokens=100,
                     temperature=0.1
                 )
-                search_query = rewrite_comp.choices[0].message.content.strip().strip('"\'')
-                print(f"[MEMORY REWRITE] '{query}' -> '{search_query}'")
+                search_query = sanitize_query(rewrite_comp.choices[0].message.content.strip().strip('"\''))
             except Exception as e:
-                print(f"[WARN] Query rewrite failed: {e}")
+                pass  # Silently fall back to original query
 
+        # Search and generate answer
         results = search(search_query)
         answer, model_used = generate_answer(search_query, results)
+
+        # Calculate latency
+        latency_ms = (time.time() - start_time) * 1000
+
+        # Log request details
+        log_request(query, search_query, results, model_used, latency_ms, len(answer))
 
         # Detect [NO_INFO] signal from the AI
         no_info = answer.strip().startswith("[NO_INFO]")
 
-        if no_info:
-            # Build a dynamic Freshdesk search URL using the user's query keywords
-            import urllib.parse
-            search_term = urllib.parse.quote_plus(query)
-            return jsonify({
-                "answer":     "I don't have that information in the knowledge base. Please check the links below:",
-                "model_used": model_used,
-                "no_info":    True,
-                "search_url": f"https://hushly.freshdesk.com/support/search/solutions?term={search_term}",
-                "sources":    [],
-                "titles":     [],
-            })
-
-        return jsonify({
+        response_data = {
             "answer":     answer,
             "model_used": model_used,
-            "no_info":    False,
+            "no_info":    no_info,
             "sources":    list(dict.fromkeys(r["source"] for r in results)),
             "titles":     list(dict.fromkeys(r["title"]  for r in results)),
-            "recommendations": recommendations
-        })
+            "recommendations": recommendations,
+            "cached": False
+        }
+
+        if no_info:
+            search_term = urllib.parse.quote_plus(query)
+            response_data["answer"] = "I don't have that information in the knowledge base. Please check the links below:"
+            response_data["search_url"] = f"https://hushly.freshdesk.com/support/search/solutions?term={search_term}"
+            response_data["sources"] = []
+            response_data["titles"] = []
+        else:
+            # Cache successful responses (only if cacheable)
+            if should_use_cache(query):
+                response_cache[cache_key] = response_data
+
+        return jsonify(response_data)
 
     except Exception as e:
         import traceback
@@ -248,6 +196,7 @@ Standalone question:"""
         return jsonify({"error": str(e)}), 500
 
 @app.route("/enhance", methods=["POST"])
+@limiter.limit("10 per minute")
 def enhance():
     try:
         body = request.json
@@ -305,6 +254,7 @@ Enhanced question:"""
         return jsonify({"error": str(e)}), 500
 
 @app.route("/generate_steps", methods=["POST"])
+@limiter.limit("10 per minute")
 def generate_steps():
     try:
         body = request.json
@@ -348,6 +298,44 @@ Output Format strictly as JSON:
         json_resp = json.loads(completion.choices[0].message.content)
         return jsonify(json_resp)
 
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/feedback", methods=["POST"])
+@limiter.limit("60 per minute")
+def feedback():
+    """Accept feedback for eval dataset."""
+    try:
+        body = request.json
+        if not body:
+            return jsonify({"error": "Request body is missing"}), 400
+        
+        query = body.get("query", "")
+        answer = body.get("answer", "")
+        helpful = body.get("helpful")
+        
+        if helpful is None:
+            return jsonify({"error": "helpful field is required (true/false)"}), 400
+        
+        # Append to feedback log
+        feedback_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "query": query,
+            "answer": answer,
+            "helpful": helpful
+        }
+        
+        # Ensure logs directory exists
+        os.makedirs("logs", exist_ok=True)
+        
+        # Append to feedback.jsonl
+        with open("logs/feedback.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(feedback_entry) + "\n")
+        
+        return jsonify({"success": True}), 200
+        
     except Exception as e:
         import traceback
         traceback.print_exc()

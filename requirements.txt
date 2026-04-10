@@ -1,5 +1,6 @@
 flask
 flask-cors
+flask-limiter
 faiss-cpu
 numpy
 sentence-transformers
@@ -7,5 +8,10 @@ google-genai
 groq
 python-dotenv
 gunicorn
+loguru
+cachetools
+rank-bm25
+ragas
+chromadb
 graphifyy
 

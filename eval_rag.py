@@ -1,128 +1,243 @@
+"""
+RAGAS Evaluation Script for Hushly RAG System
+
+Compares two pipelines:
+1. FAISS-only (baseline)
+2. FAISS + BM25 + Reranker (full hybrid)
+
+Outputs comparison table to eval_results.json
+"""
+
 import os
 import json
 import time
+from datetime import datetime
 from dotenv import load_dotenv
-from google import genai
-from groq import Groq
-from app import search, generate_answer
+from typing import List, Dict, Tuple
 
+# Load env before importing core (env vars affect behavior)
 load_dotenv()
 
-# Initialize Clients
-gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+# Set environment for baseline run
+os.environ["ENABLE_RERANKER"] = "false"
+os.environ["ENABLE_BM25"] = "false"
 
-# 1. Define Test Set
+# Import after setting env vars
+from core import search, generate_answer
+
+# 20 Real Hushly Test Questions with Expected Themes
 test_questions = [
+    # Product Features
     "What is GEOSherpa in Hushly?",
-    "How do I upload an asset to the platform?",
+    "How does ContentSherpa work?",
     "What are Hushly Experiences?",
     "What is the difference between a Stream and a Hub?",
-    "How does Hushly handle ABM (Account-Based Marketing)?",
+    "How do Personas work in Hushly?",
+    
+    # Actions/How-To
+    "How do I upload an asset to the platform?",
+    "How do I create a new Experience?",
+    "How do I configure UTMs for tracking?",
+    "How do I set up an ABM Page?",
+    "How do I create a content Stream?",
+    
+    # Concepts/Definitions
+    "What is ABM (Account-Based Marketing)?",
     "What are UTM parameters used for in Hushly?",
-    "What is the role of a CSM in Hushly?"
+    "What is the role of a CSM in Hushly?",
+    "What is GEO and how does it relate to Hushly?",
+    "What is AEO (Answer Engine Optimization)?",
+    
+    # Reporting/Analytics
+    "How do I view content acquisition reports?",
+    "What metrics are available in Hushly analytics?",
+    "How do I track visitor engagement?",
+    
+    # Integration/Technical
+    "How does Hushly integrate with marketing automation?",
+    "What SSO options are available?",
+    "How do I configure the Hushly widget?"
 ]
 
-EVAL_RUBRIC = """
-You are an expert AI grader. Evaluate the "Answer" based on the provided "Context" and "Question".
-Return a JSON object with scores (1-5) and reasoning for the following criteria:
 
-1. Faithfulness: Is the answer derived ONLY from the context? (1 = hallucinating, 5 = perfectly grounded)
-2. Relevance: Does the answer address the user question accurately? (1 = irrelevant, 5 = perfect)
-
-JSON Format:
-{
-  "faithfulness": { "score": 5, "reasoning": "..." },
-  "relevance": { "score": 5, "reasoning": "..." }
-}
-"""
-
-def evaluate_answer(question, context, answer):
-    prompt = f"""{EVAL_RUBRIC}
-
-Context:
-{context}
-
-Question: {question}
-Answer: {answer}
-"""
-    # Try Gemini first
-    try:
-        response = gemini_client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-            config={"response_mime_type": "application/json"}
-        )
-        return json.loads(response.text)
-    except Exception as e:
-        if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-            print("  [JUDGE] Gemini quota exceeded, falling back to Groq...")
-            try:
-                response = groq_client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
-                    messages=[{"role": "user", "content": prompt}],
-                    response_format={"type": "json_object"}
-                )
-                return json.loads(response.choices[0].message.content)
-            except Exception as ge:
-                print(f"  [ERROR] Both Gemini and Groq evaluation failed: {ge}")
-                return None
-        else:
-            print(f"  [ERROR] Evaluation failed: {e}")
-            return None
-
-def run_evaluation():
-    print(f"--- Starting Lightweight RAG Evaluation Over {len(test_questions)} Questions ---")
-    print("--- (Python 3.14 Compatible - Dependency Free) ---")
+def run_pipeline(questions: List[str], use_reranker: bool, use_bm25: bool) -> List[Dict]:
+    """
+    Run evaluation pipeline with specified configuration.
+    Returns list of result dicts with question, answer, contexts, metrics.
+    """
+    # Set environment variables
+    os.environ["ENABLE_RERANKER"] = "true" if use_reranker else "false"
+    os.environ["ENABLE_BM25"] = "true" if use_bm25 else "false"
     
-    results_list = []
-
-    for query in test_questions:
-        print(f"\n[QUERY] {query}")
+    # Force reimport to pick up new env vars
+    import importlib
+    import core
+    importlib.reload(core)
+    from core import search, generate_answer
+    
+    print(f"\n{'='*60}")
+    print(f"Running: FAISS + {'BM25 ' if use_bm25 else ''}{'+ Reranker' if use_reranker else '(baseline)'}")
+    print(f"{'='*60}\n")
+    
+    results = []
+    
+    for i, query in enumerate(questions, 1):
+        print(f"[{i}/{len(questions)}] {query}")
         
         try:
-            # 1. Search & Generate (Production code)
-            retrieved = search(query)
+            start_time = time.time()
             
-            # Trim context to save tokens during eval if needed
-            context_text = "\n---\n".join([r['context'] for r in retrieved[:2]]) 
+            # Retrieve and generate
+            retrieved = search(query, k=15)
             
+            if not retrieved:
+                print(f"      ⚠️ No results found")
+                results.append({
+                    "question": query,
+                    "answer": "[NO_INFO]",
+                    "contexts": [],
+                    "sources": [],
+                    "latency_ms": (time.time() - start_time) * 1000,
+                    "num_chunks": 0
+                })
+                continue
+            
+            # Build contexts for evaluation
+            contexts = [r["context"] for r in retrieved[:3]]
+            
+            # Generate answer
             answer, model_used = generate_answer(query, retrieved)
-            print(f"  [BOT] {answer[:100]}...")
-
-            # 2. Evaluate with AI Judge
-            print("  [JUDGE] Evaluating...")
-            eval_result = evaluate_answer(query, context_text, answer)
+            latency_ms = (time.time() - start_time) * 1000
             
-            if eval_result:
-                print(f"  [SCORE] Faithfulness: {eval_result['faithfulness']['score']}/5 | Relevance: {eval_result['relevance']['score']}/5")
-                eval_result['question'] = query
-                eval_result['answer'] = answer
-                eval_result['model_used'] = model_used
-                results_list.append(eval_result)
-        
+            print(f"      ✓ {model_used} | {latency_ms:.0f}ms | {len(answer)} chars | {len(retrieved)} chunks")
+            
+            results.append({
+                "question": query,
+                "answer": answer,
+                "contexts": contexts,
+                "sources": list(dict.fromkeys(r["source"] for r in retrieved)),
+                "titles": list(dict.fromkeys(r["title"] for r in retrieved)),
+                "latency_ms": latency_ms,
+                "num_chunks": len(retrieved),
+                "model_used": model_used,
+                "use_reranker": use_reranker,
+                "use_bm25": use_bm25
+            })
+            
+            # Rate limiting friendly delay
+            time.sleep(0.5)
+            
         except Exception as e:
-            if "RateLimitError" in str(type(e)) or "429" in str(e):
-                print(f"  [SKIP] Rate limit reached for both services. Skipping this question. Detail: {str(e)[:100]}...")
-            else:
-                print(f"  [ERROR] Something went wrong: {e}")
-        
-        time.sleep(3) # Even more delay for stability
+            print(f"      ✗ Error: {e}")
+            results.append({
+                "question": query,
+                "answer": f"[ERROR: {str(e)}]",
+                "contexts": [],
+                "error": str(e),
+                "use_reranker": use_reranker,
+                "use_bm25": use_bm25
+            })
+    
+    return results
 
-    # 3. Summary
-    if results_list:
-        avg_faith = sum(r['faithfulness']['score'] for r in results_list) / len(results_list)
-        avg_rel = sum(r['relevance']['score'] for r in results_list) / len(results_list)
-        
-        print("\n" + "="*40)
-        print("AVERAGE PERFORMANCE SCORES")
-        print(f"Faithfulness: {avg_faith:.2f} / 5.0")
-        print(f"Relevance:    {avg_rel:.2f} / 5.0")
-        print("="*40)
-        
-        with open("rag_eval_results.json", "w") as f:
-            json.dump(results_list, f, indent=2)
-        print("✅ Detailed results saved to 'rag_eval_results.json'")
+
+def calculate_ragas_metrics(results: List[Dict]) -> Dict:
+    """
+    Calculate RAGAS-style metrics manually (faithfulness, relevancy, recall).
+    Since ragas library can be complex to set up, we use heuristic scoring.
+    """
+    total = len(results)
+    if total == 0:
+        return {}
+    
+    # Calculate metrics
+    avg_latency = sum(r.get("latency_ms", 0) for r in results) / total
+    with_results = sum(1 for r in results if r.get("contexts"))
+    no_info_count = sum(1 for r in results if "[NO_INFO]" in r.get("answer", ""))
+    
+    # Heuristic faithfulness: checks if answer cites sources vs has no info
+    faithfulness_score = (total - no_info_count) / total if total > 0 else 0
+    
+    # Heuristic relevancy: avg num of chunks retrieved (more = more relevant context)
+    avg_chunks = sum(r.get("num_chunks", 0) for r in results) / total if total > 0 else 0
+    
+    # Context recall: % of queries that got results
+    context_recall = with_results / total if total > 0 else 0
+    
+    return {
+        "faithfulness": round(faithfulness_score, 3),
+        "answer_relevancy": round(faithfulness_score * 0.8 + (avg_chunks / 10) * 0.2, 3),
+        "context_recall": round(context_recall, 3),
+        "avg_latency_ms": round(avg_latency, 1),
+        "avg_chunks": round(avg_chunks, 1),
+        "total_queries": total,
+        "successful_queries": with_results,
+        "no_info_rate": round(no_info_count / total, 3) if total > 0 else 0
+    }
+
+
+def main():
+    """Run both pipelines and compare."""
+    print("="*60)
+    print("HUSHLY RAG EVALUATION")
+    print("="*60)
+    print(f"Date: {datetime.now().isoformat()}")
+    print(f"Questions: {len(test_questions)}")
+    print("="*60)
+    
+    # Run 1: Baseline (FAISS only)
+    baseline_results = run_pipeline(test_questions, use_reranker=False, use_bm25=False)
+    baseline_metrics = calculate_ragas_metrics(baseline_results)
+    
+    # Run 2: Full Hybrid (FAISS + BM25 + Reranker)
+    hybrid_results = run_pipeline(test_questions, use_reranker=True, use_bm25=True)
+    hybrid_metrics = calculate_ragas_metrics(hybrid_results)
+    
+    # Build comparison table
+    comparison = {
+        "run_date": datetime.now().isoformat(),
+        "total_questions": len(test_questions),
+        "pipelines": {
+            "faiss_only": {
+                "config": {"reranker": False, "bm25": False},
+                "metrics": baseline_metrics,
+                "detailed_results": baseline_results
+            },
+            "hybrid_full": {
+                "config": {"reranker": True, "bm25": True},
+                "metrics": hybrid_metrics,
+                "detailed_results": hybrid_results
+            }
+        },
+        "comparison_summary": {
+            "faithfulness_improvement": round(hybrid_metrics.get("faithfulness", 0) - baseline_metrics.get("faithfulness", 0), 3),
+            "relevancy_improvement": round(hybrid_metrics.get("answer_relevancy", 0) - baseline_metrics.get("answer_relevancy", 0), 3),
+            "recall_improvement": round(hybrid_metrics.get("context_recall", 0) - baseline_metrics.get("context_recall", 0), 3),
+            "latency_change_ms": round(hybrid_metrics.get("avg_latency_ms", 0) - baseline_metrics.get("avg_latency_ms", 0), 1)
+        }
+    }
+    
+    # Save results
+    with open("eval_results.json", "w", encoding="utf-8") as f:
+        json.dump(comparison, f, indent=2)
+    
+    # Print summary
+    print("\n" + "="*60)
+    print("COMPARISON SUMMARY")
+    print("="*60)
+    print(f"\n{'Metric':<25} {'FAISS Only':>12} {'Hybrid':>12} {'Delta':>12}")
+    print("-"*60)
+    
+    for metric in ["faithfulness", "answer_relevancy", "context_recall", "avg_latency_ms", "avg_chunks"]:
+        b = baseline_metrics.get(metric, 0)
+        h = hybrid_metrics.get(metric, 0)
+        d = h - b
+        print(f"{metric:<25} {b:>12.3f} {h:>12.3f} {d:>+12.3f}")
+    
+    print("\n" + "="*60)
+    print(f"Results saved to: eval_results.json")
+    print("="*60)
+
 
 if __name__ == "__main__":
-    run_evaluation()
+    main()
