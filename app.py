@@ -1,3 +1,13 @@
+"""
+Hushly RAG Web API - Flask application for production serving.
+
+SYSTEM CONTEXT:
+- WHERE: Deployed to cloud (Heroku/AWS/etc). Entry point for web requests.
+- WHEN: Runs continuously as a service. Started via Gunicorn (see Procfile).
+- WHAT: HTTP endpoints for /ask (RAG queries), /health (status), /feedback (evaluation data).
+  Handles rate limiting, input guardrails, caching, and orchestrates core.search() + core.generate_answer().
+"""
+
 from flask import Flask, request, jsonify, send_from_directory
 import json
 import os

@@ -1,3 +1,14 @@
+"""
+Data Ingestion Script - Build chunks_enterprise.json from PDF.
+
+SYSTEM CONTEXT:
+- WHERE: Run once (or when KB changes) to process source documents.
+- WHEN: When you have new/updated documentation (kb.pdf) and need to regenerate the vector index.
+- WHAT: Extracts text from PDF, chunks it, builds parent/child chunk structure,
+  generates embeddings, creates FAISS index + metadata, outputs chunks_enterprise.json.
+  Must be run BEFORE starting app.py or rag.py (they depend on the output files).
+"""
+
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 import requests

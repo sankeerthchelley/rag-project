@@ -1,6 +1,12 @@
 """
 RAGAS Evaluation Script for Hushly RAG System
 
+SYSTEM CONTEXT:
+- WHERE: Run manually by developers to benchmark retrieval quality.
+- WHEN: Run after making changes to search logic (core.py), or to compare FAISS vs BM25 vs Reranker.
+- WHAT: Runs 20 test questions through different pipeline configs, scores with AI judge,
+  outputs eval_results.json with comparison tables. Uses module reload to test different flags.
+
 Compares two pipelines:
 1. FAISS-only (baseline)
 2. FAISS + BM25 + Reranker (full hybrid)

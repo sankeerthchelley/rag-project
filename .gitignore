@@ -8,8 +8,14 @@ env/
 .env
 
 # Project specific
-# faiss_index.bin
-# faiss_texts.pkl
+faiss_index*.bin
+faiss_texts*.pkl
+chroma_db/
+logs/
+graphify-out/
+.graphify_*.json
+kb.pdf
+kb.html
 
 # OS specific
 .DS_Store

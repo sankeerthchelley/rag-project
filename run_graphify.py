@@ -1,3 +1,14 @@
+"""
+Knowledge Graph Generator - Visualize codebase architecture.
+
+SYSTEM CONTEXT:
+- WHERE: Run manually by developers to understand the codebase structure.
+- WHEN: When you want a visual map of how files/modules connect, or to audit architecture.
+- WHAT: Scans the codebase, extracts AST structure, builds a graph, clusters related code,
+  generates interactive HTML visualization (graphify-out/graph.html) and markdown report.
+  Optional step - NOT required for RAG to function (app.py/rag.py work without this).
+"""
+
 import os
 import json
 import subprocess

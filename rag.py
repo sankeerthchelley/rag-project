@@ -1,7 +1,11 @@
 """
-RAG CLI Interface - Refactored to use core.py
+RAG CLI Interface - Command-line chat for local testing.
 
-Old functions are commented out below for 48hr grace period before deletion.
+SYSTEM CONTEXT:
+- WHERE: Run locally by developers/admins. No web server needed.
+- WHEN: Used for quick testing, debugging, or when you just want a terminal chat.
+- WHAT: Interactive loop that takes user input, calls core.search() + core.generate_answer(),
+  prints answers with sources. Tests AI connections at startup.
 """
 
 from core import search, generate_answer, groq_client

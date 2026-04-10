@@ -1,6 +1,12 @@
 """
 Core RAG functionality - search and answer generation.
 Refactored from app.py and rag.py for shared use.
+
+SYSTEM CONTEXT:
+- WHERE: Imported by app.py (web API) and rag.py (CLI). Central module.
+- WHEN: Loaded at application startup. Lazy-loads heavy models (reranker, BM25, ChromaDB) on first use.
+- WHAT: Handles all retrieval (FAISS/ChromaDB/BM25), reranking, answer generation,
+  caching, health checks, and logging. Contains the shared business logic.
 """
 
 import json
