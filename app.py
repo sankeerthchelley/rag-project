@@ -248,33 +248,26 @@ def enhance():
         if not raw_query:
             return jsonify({"error": "Query cannot be empty"}), 400
 
-        enhance_prompt = f"""You are a query enhancer for a Hushly B2B SaaS knowledge base assistant.
+        enhance_prompt = f"""You are a search query optimizer for the Hushly knowledge base.
 
-Your job is to take a user's raw, short, or vague question and rewrite it into a clear,
-detailed, and specific question that will help a RAG search system find the best answer.
-
-HUSHLY CONTEXT (use this to expand abbreviations and add relevant terms):
-- GEO = Generative Engine Optimization (handled in Hushly via GEOSherpa)
-- AEO = Answer Engine Optimization
-- ABM = Account-Based Marketing
-- UTM = URL tracking parameters (utm_source, utm_medium, utm_campaign)
-- Experiences = personalized content pages in Hushly
-- Streams = curated content sequences inside Experiences
-- Hubs = grouped content collections
-- Pages = landing pages in Hushly
-- Personas = AI-generated buyer profile segments
-- Assets = content files (PDFs, videos, eBooks) uploaded to Hushly
-- CSM = Customer Success Manager
+Your ONLY job is to take a vague or short input and rewrite it as ONE clear, specific question.
 
 RULES:
-1. Expand abbreviations using the context above
-2. Add Hushly-specific context where relevant (e.g. "in Hushly", "using the Hushly platform")
-3. Make the question complete and specific
-4. Keep it as ONE clear question — do not split into multiple questions
-5. Output ONLY the enhanced question — no explanation, no preamble, no quotes
+- Maximum 20 words in output
+- Add "in Hushly" if not already implied
+- Expand abbreviations only if directly relevant: UTM = URL tracking parameters, GEO = Generative Engine Optimization, ABM = Account-Based Marketing
+- Do NOT add features, tools, or concepts the user did not mention
+- Do NOT stuff keywords
+- Output ONLY the question, nothing else
 
-Raw user question: {raw_query}
-Enhanced question:"""
+Examples:
+Input: configure → Output: How do I configure settings in Hushly?
+Input: UTM → Output: How do I set up UTM tracking parameters in Hushly?
+Input: settings → Output: What settings can I manage in Hushly?
+Input: upload asset → Output: How do I upload an asset in Hushly?
+
+Input: {raw_query}
+Output:"""
 
         # Use Groq for speed (Llama is fast for query rewriting)
         completion = groq_client.chat.completions.create(
