@@ -812,6 +812,42 @@
       font-size: 12px;
       color: var(--text-light);
     }
+    .no-info-card {
+      background: #f8f9fc;
+      border: 1px solid #e2e6f0;
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+      max-width: 480px;
+      margin: 12px auto;
+    }
+    .no-info-icon {
+      font-size: 28px;
+      margin-bottom: 10px;
+    }
+    .no-info-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #2d3748;
+      margin-bottom: 6px;
+    }
+    .no-info-subtitle {
+      font-size: 13px;
+      color: #718096;
+      margin-bottom: 16px;
+    }
+    .no-info-link {
+      display: inline-block;
+      background: #4f46e5;
+      color: white;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      text-decoration: none;
+    }
+    .no-info-link:hover {
+      background: #4338ca;
+    }
   </style>
 </head>
 
@@ -841,28 +877,10 @@
             <i data-lucide="message-square"></i>
           </div>
           <h3>How can I help you?</h3>
-          <p>Ask a question and I'll search your knowledge base for the best answer.</p>
+          <p>Ask a question about Hushly features, workflows, or product behaviour.</p>
 
-          <!-- ── Live stats from /health ── -->
-          <div class="stats-bar" id="statsBar" style="display:none">
-            <div class="stat-item">
-              <span class="stat-value" id="statChunks">—</span>
-              <span class="stat-label">Chunks</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-value" id="statVectors">—</span>
-              <span class="stat-label">Vectors</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-value" id="statParents">—</span>
-              <span class="stat-label">Articles</span>
-            </div>
-          </div>
-
-          <div class="suggestions">
-            <button class="suggestion-chip" onclick="fillInput(this)">What is an asset?</button>
-            <button class="suggestion-chip" onclick="fillInput(this)">How to upload a document?</button>
-            <button class="suggestion-chip" onclick="fillInput(this)">What are Mitab Topics?</button>
+          <div class="suggestions" id="suggestionContainer">
+            <!-- Dynamic suggestions injected here -->
           </div>
         </div>
       </div>
@@ -924,10 +942,33 @@
     const statusDot = document.getElementById("statusDotIndicator");
     const statusText = document.getElementById("statusTextWidget");
     const visualizerEl = document.getElementById("visualizer");
-    const statsBar = document.getElementById("statsBar");
-    const statChunks = document.getElementById("statChunks");
-    const statVectors = document.getElementById("statVectors");
-    const statParents = document.getElementById("statParents");
+    const suggestionContainer = document.getElementById("suggestionContainer");
+
+    const SUGGESTION_POOL = [
+      "What is GEOSherpa?",
+      "How do I create an Experience?",
+      "Setup ABM Page",
+      "How to upload an asset?",
+      "What is an ABM Page?",
+      "Configure UTM tracking",
+      "What are Personas?",
+      "How to use GEOSherpa for SEO?",
+      "What is a Content Stream?",
+      "How to add a visitor group?",
+      "What is the difference between Hubs and Streams?",
+      "How to integrate with Salesforce?",
+      "What is Hushly AEO?",
+      "How to set up a campaign template?"
+    ];
+
+    function initSuggestions() {
+      if (!suggestionContainer) return;
+      const shuffled = [...SUGGESTION_POOL].sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, 3);
+      suggestionContainer.innerHTML = selected.map(q => 
+        `<button class="suggestion-chip" onclick="fillInput(this)">${q}</button>`
+      ).join("");
+    }
 
     let isServerConnected = false;
     let chatHistory = []; // Track recent conversation memory
@@ -956,12 +997,6 @@
           chatBanner.classList.add("online");
           statusDot.className = "status-dot-indicator online";
           statusText.textContent = "Server is running";
-
-          // Show live stats in empty state
-          statChunks.textContent = (info.chunks_loaded || "—").toLocaleString();
-          statVectors.textContent = (info.vectors_indexed || "—").toLocaleString();
-          statParents.textContent = (info.parents_loaded || "—").toLocaleString();
-          statsBar.style.display = "flex";
         }
       } catch {
         if (isServerConnected !== false) {
@@ -985,6 +1020,7 @@
 
     setInterval(checkServerStatus, 2000);
     checkServerStatus();
+    initSuggestions(); // Initialize random suggestions on load
 
     // ── VOICE LOGIC (Web Speech API) ──
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1164,6 +1200,24 @@
       scroll();
     }
 
+    function renderNoInfo(searchUrl) {
+      hideEmpty();
+      const msg = document.createElement("div");
+      msg.className = "msg bot";
+      msg.innerHTML = `
+        <div class="no-info-card">
+          <div class="no-info-icon">🔍</div>
+          <div class="no-info-title">I couldn't find that in the Hushly knowledge base.</div>
+          <div class="no-info-subtitle">Try rephrasing, or search the Hushly Help Center directly.</div>
+          <a class="no-info-link" href="${searchUrl}" target="_blank">
+            Search Help Center →
+          </a>
+        </div>
+      `;
+      messagesEl.appendChild(msg);
+      scroll();
+    }
+
     // Shorten raw URL to last slug segment as fallback label
     function shortenUrl(url) {
       try {
@@ -1287,10 +1341,11 @@
         removeThinking();
 
         if (data.no_info) {
-          // Show exactly the 3 fallback links — no KB sources
-          addFallbackLinks(data.search_url, data.model_used || "");
+          const searchUrl = `https://hushly.freshdesk.com/support/search/solutions?term=${encodeURIComponent(query)}`;
+          renderNoInfo(searchUrl);
           chatHistory.push({ role: "user", content: query });
-          chatHistory.push({ role: "assistant", content: "I don't have that information in the knowledge base." });
+          chatHistory.push({ role: "assistant", content: "[NO_INFO]" });
+          return;
         } else {
           // Normal KB answer
           addBotMsg(data.answer, data.sources || [], data.titles || [], data.model_used || "", data.recommendations || []);

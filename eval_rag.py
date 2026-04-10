@@ -31,7 +31,7 @@ os.environ["ENABLE_BM25"] = "false"
 # Import after setting env vars
 from core import search, generate_answer
 
-# 20 Real Hushly Test Questions with Expected Themes
+# 25 Real Hushly Test Questions with Expected Themes
 test_questions = [
     # Product Features
     "What is GEOSherpa in Hushly?",
@@ -62,7 +62,16 @@ test_questions = [
     # Integration/Technical
     "How does Hushly integrate with marketing automation?",
     "What SSO options are available?",
-    "How do I configure the Hushly widget?"
+    "How do I configure the Hushly widget?",
+    
+    # Follow-up style questions (requires conversation context)
+    "Can you explain more about that?",
+    "What are the benefits of using it?",
+    
+    # Edge cases - likely to return NO_INFO
+    "What is the meaning of life?",
+    "How do I make a pizza?",
+    "Who won the World Series in 1985?"
 ]
 
 
@@ -70,17 +79,8 @@ def run_pipeline(questions: List[str], use_reranker: bool, use_bm25: bool) -> Li
     """
     Run evaluation pipeline with specified configuration.
     Returns list of result dicts with question, answer, contexts, metrics.
+    Passes flags directly to search() instead of manipulating module state.
     """
-    # Set environment variables
-    os.environ["ENABLE_RERANKER"] = "true" if use_reranker else "false"
-    os.environ["ENABLE_BM25"] = "true" if use_bm25 else "false"
-    
-    # Force reimport to pick up new env vars
-    import importlib
-    import core
-    importlib.reload(core)
-    from core import search, generate_answer
-    
     print(f"\n{'='*60}")
     print(f"Running: FAISS + {'BM25 ' if use_bm25 else ''}{'+ Reranker' if use_reranker else '(baseline)'}")
     print(f"{'='*60}\n")
@@ -93,8 +93,8 @@ def run_pipeline(questions: List[str], use_reranker: bool, use_bm25: bool) -> Li
         try:
             start_time = time.time()
             
-            # Retrieve and generate
-            retrieved = search(query, k=15)
+            # Retrieve and generate (pass flags directly)
+            retrieved = search(query, k=15, use_reranker=use_reranker, use_bm25=use_bm25)
             
             if not retrieved:
                 print(f"      ⚠️ No results found")

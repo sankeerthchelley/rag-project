@@ -11,8 +11,8 @@ SYSTEM CONTEXT:
 from flask import Flask, request, jsonify, send_from_directory
 import json
 import os
-import time
 import re
+import time
 import urllib.parse
 from datetime import datetime
 from flask_cors import CORS
@@ -56,25 +56,36 @@ limiter = Limiter(
 # ─────────────────────────────────────────
 # INPUT GUARDRAILS CONFIG
 # ─────────────────────────────────────────
-INJECTION_BLOCKLIST = [
-    "ignore previous",
-    "forget instructions", 
-    "you are now",
-    "act as"
+INJECTION_PATTERNS = [
+    r"ignore\s+(previous|prior|above)\s+instructions?",
+    r"forget\s+(everything|instructions?|context)",
+    r"you\s+are\s+now",
+    r"act\s+as",
+    r"jailbreak",
+    r"pretend\s+(you\s+are|to\s+be)",
 ]
 MAX_QUERY_LENGTH = 500
+
+HUSHLY_TOPICS = [
+    "hushly", "experience", "stream", "hub", "asset", "page",
+    "persona", "utm", "abm", "geo", "geosherpa", "aeo",
+    "segment", "integration", "content", "upload", "account",
+    "csm", "template", "campaign", "visitor", "lead", "form"
+]
+
+def is_on_topic(query: str) -> bool:
+    """Check if the query contains any Hushly-related keywords."""
+    query_lower = query.lower()
+    return any(topic in query_lower for topic in HUSHLY_TOPICS)
 
 def sanitize_query(query: str) -> str:
     """Strip and basic sanitize query."""
     return query.strip()
 
-def check_injection(query: str) -> tuple[bool, str]:
-    """Check for prompt injection attempts."""
+def is_injection(query: str) -> bool:
+    """Check for prompt injection attempts using regex patterns."""
     query_lower = query.lower()
-    for block in INJECTION_BLOCKLIST:
-        if block in query_lower:
-            return False, f"Query contains blocked phrase: '{block}'"
-    return True, ""
+    return any(re.search(pattern, query_lower) for pattern in INJECTION_PATTERNS)
 
 # ─────────────────────────────────────────
 # ROUTES
@@ -84,6 +95,7 @@ def home():
     return send_from_directory(".", "kb.html")
 
 @app.route("/health", methods=["GET"])
+@limiter.exempt
 def health():
     # Check LLM health
     llm_status = check_llm_health()
@@ -119,10 +131,19 @@ def ask():
         if not query:
             return jsonify({"error": "Query cannot be empty"}), 400
 
-        # Check for injection
-        is_safe, error_msg = check_injection(query)
-        if not is_safe:
-            return jsonify({"error": error_msg}), 400
+        # Check for injection (do not log the query content itself)
+        if is_injection(query):
+            return jsonify({"error": "Invalid query"}), 400
+
+        # Topic Guard: Check if query is related to Hushly
+        if not is_on_topic(query):
+            return jsonify({
+                "answer": None,
+                "no_info": True,
+                "no_info_reason": "off_topic",
+                "sources": [],
+                "titles": []
+            }), 200
 
         # Check cache (skip if personalized query with pronouns)
         cache_key = get_cache_key(query)
@@ -166,6 +187,16 @@ Standalone question:"""
 
         # Search and generate answer
         results = search(search_query)
+        
+        if not results:
+            return jsonify({
+                "answer": None,
+                "no_info": True,
+                "no_info_reason": "low_relevance",
+                "sources": [],
+                "titles": []
+            }), 200
+
         answer, model_used = generate_answer(search_query, results)
 
         # Calculate latency
@@ -174,8 +205,8 @@ Standalone question:"""
         # Log request details
         log_request(query, search_query, results, model_used, latency_ms, len(answer))
 
-        # Detect [NO_INFO] signal from the AI
-        no_info = answer.strip().startswith("[NO_INFO]")
+        # Detect [NO_INFO] signal from the AI (case-insensitive and position-independent)
+        no_info = "[NO_INFO]" in answer.strip().upper()
 
         response_data = {
             "answer":     answer,

@@ -100,69 +100,71 @@ print(f"[LOAD] {len(children)} child chunks | {len(parents)} parent chunks")
 # ─────────────────────────────────────────
 model = SentenceTransformer(EMBED_MODEL_NAME)
 
-# Reranker (cross-encoder) - lazy loaded
+# Reranker (cross-encoder) - initialize at startup if enabled
 _reranker = None
+if ENABLE_RERANKER:
+    from sentence_transformers import CrossEncoder
+    _reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+    logger.info("Reranker loaded: cross-encoder/ms-marco-MiniLM-L-6-v2")
 
 def get_reranker():
-    global _reranker
-    if _reranker is None and ENABLE_RERANKER:
-        from sentence_transformers import CrossEncoder
-        _reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-        logger.info("Reranker loaded: cross-encoder/ms-marco-MiniLM-L-6-v2")
     return _reranker
 
-# BM25 index - lazy loaded
+# BM25 index - initialize at startup if enabled
 _bm25 = None
 _tokenized_texts = None
+if ENABLE_BM25:
+    from rank_bm25 import BM25Okapi
+    _tokenized_texts = [text.lower().split() for text in child_texts]
+    _bm25 = BM25Okapi(_tokenized_texts)
+    logger.info("BM25 index built")
 
-# ChromaDB - lazy loaded
+# ChromaDB - initialize at startup if enabled
 _chroma_collection = None
+if USE_CHROMA:
+    import chromadb
+    from chromadb.config import Settings
+    
+    chroma_client = chromadb.Client(Settings(
+        chroma_db_impl="duckdb+parquet",
+        persist_directory="chroma_db"
+    ))
+    
+    # Create or get collection
+    collection_name = "hushly_kb"
+    try:
+        _chroma_collection = chroma_client.get_collection(name=collection_name)
+        logger.info(f"ChromaDB collection loaded: {collection_name}")
+    except:
+        # Build collection from chunks
+        _chroma_collection = chroma_client.create_collection(name=collection_name)
+        
+        # Add documents in batches
+        batch_size = 100
+        for i in range(0, len(children), batch_size):
+            batch = children[i:i+batch_size]
+            ids = [c["chunk_id"] for c in batch]
+            texts = [c.get("content", "") for c in batch]
+            metadatas = [{
+                "title": c.get("title", ""),
+                "source": c.get("source_url", ""),
+                "parent_id": c.get("parent_chunk_id", "")
+            } for c in batch]
+            
+            # Generate embeddings
+            embeddings = model.encode(texts).tolist()
+            
+            _chroma_collection.add(
+                ids=ids,
+                embeddings=embeddings,
+                metadatas=metadatas,
+                documents=texts
+            )
+        
+        logger.info(f"ChromaDB collection built: {collection_name} with {len(children)} documents")
 
 def get_chroma_collection():
-    """Initialize ChromaDB collection as FAISS alternative."""
-    global _chroma_collection
-    if _chroma_collection is None and USE_CHROMA:
-        import chromadb
-        from chromadb.config import Settings
-        
-        chroma_client = chromadb.Client(Settings(
-            chroma_db_impl="duckdb+parquet",
-            persist_directory="chroma_db"
-        ))
-        
-        # Create or get collection
-        collection_name = "hushly_kb"
-        try:
-            _chroma_collection = chroma_client.get_collection(name=collection_name)
-            logger.info(f"ChromaDB collection loaded: {collection_name}")
-        except:
-            # Build collection from chunks
-            _chroma_collection = chroma_client.create_collection(name=collection_name)
-            
-            # Add documents in batches
-            batch_size = 100
-            for i in range(0, len(children), batch_size):
-                batch = children[i:i+batch_size]
-                ids = [c["chunk_id"] for c in batch]
-                texts = [c.get("content", "") for c in batch]
-                metadatas = [{
-                    "title": c.get("title", ""),
-                    "source": c.get("source_url", ""),
-                    "parent_id": c.get("parent_chunk_id", "")
-                } for c in batch]
-                
-                # Generate embeddings
-                embeddings = model.encode(texts).tolist()
-                
-                _chroma_collection.add(
-                    ids=ids,
-                    embeddings=embeddings,
-                    metadatas=metadatas,
-                    documents=texts
-                )
-            
-            logger.info(f"ChromaDB collection built: {collection_name} with {len(children)} documents")
-    
+    """Return initialized ChromaDB collection."""
     return _chroma_collection
 
 def chroma_search(query: str, k: int = 15) -> List[Tuple[int, float]]:
@@ -194,19 +196,15 @@ def chroma_search(query: str, k: int = 15) -> List[Tuple[int, float]]:
     for doc_id, dist in zip(chroma_ids, distances):
         idx = child_id_to_idx.get(doc_id, -1)
         if idx >= 0:
-            # Convert distance to similarity score (ChromaDB uses cosine distance)
+            # SCALE: Convert ChromaDB cosine distance [0, 2] to similarity [0, 1]
+            # where 1.0 = identical vectors, 0.0 = opposite vectors
             score = 1.0 - float(dist)
             results_list.append((idx, score))
     
     return results_list
 
 def get_bm25():
-    global _bm25, _tokenized_texts
-    if _bm25 is None and ENABLE_BM25:
-        from rank_bm25 import BM25Okapi
-        _tokenized_texts = [text.lower().split() for text in child_texts]
-        _bm25 = BM25Okapi(_tokenized_texts)
-        logger.info("BM25 index built")
+    """Return initialized BM25 index."""
     return _bm25
 
 def build_faiss_index():
@@ -259,6 +257,11 @@ def faiss_search(query: str, k: int = 15) -> List[Tuple[int, float]]:
     
     scores, indices = index.search(query_vec, k)
     
+    # Similarity Threshold Guard: If the best match is too weak, reject early
+    # (scores[0][0] is the similarity of the top match on [0, 1] scale)
+    if len(scores[0]) == 0 or scores[0][0] < SIMILARITY_THRESHOLD:
+        return []
+    
     results = []
     for idx, score in zip(indices[0], scores[0]):
         if 0 <= idx < len(children):
@@ -293,6 +296,9 @@ def merge_results(faiss_results: List[Tuple[int, float]],
     """
     Merge FAISS and BM25 results, deduplicate.
     Uses Reciprocal Rank Fusion (RRF) for scoring.
+    
+    NOTE: faiss_results scores are [0, 1] similarity (1.0 = best, 0.0 = worst)
+          BM25 scores are arbitrary positive values, so we use rank-based fusion
     """
     if not ENABLE_BM25 or not bm25_results:
         return [idx for idx, _ in faiss_results[:k]]
@@ -338,12 +344,22 @@ def rerank_results(query: str, results: List[Dict]) -> List[Dict]:
     # Keep top 5 after reranking
     return results[:5]
 
-def search(query: str, k: int = 15) -> List[Dict]:
+def search(query: str, k: int = 15, use_reranker: bool = None, use_bm25: bool = None) -> List[Dict]:
     """
     Main search function combining FAISS/ChromaDB, BM25, and reranking.
     Applies similarity threshold filtering.
     Returns list of result dicts with context, match, source, title.
+    
+    Args:
+        query: Search query string
+        k: Number of results to retrieve
+        use_reranker: Override global ENABLE_RERANKER flag (None = use global)
+        use_bm25: Override global ENABLE_BM25 flag (None = use global)
     """
+    # Determine effective flags (override > global)
+    effective_reranker = ENABLE_RERANKER if use_reranker is None else use_reranker
+    effective_bm25 = ENABLE_BM25 if use_bm25 is None else use_bm25
+    
     # Route to ChromaDB or FAISS based on flag
     if USE_CHROMA:
         vector_results = chroma_search(query, k)
@@ -354,7 +370,7 @@ def search(query: str, k: int = 15) -> List[Dict]:
     
     # Get BM25 results if enabled
     bm25_results = []
-    if ENABLE_BM25 and not USE_CHROMA:  # BM25 hybrid only with FAISS
+    if effective_bm25 and not USE_CHROMA:  # BM25 hybrid only with FAISS
         bm25_results = bm25_search(query, k)
     
     # Merge results (use FAISS-style merging for both)
@@ -372,9 +388,11 @@ def search(query: str, k: int = 15) -> List[Dict]:
         p_id = child.get("parent_chunk_id", "")
         
         # Get vector search score for this result
+        # SCALE: Both FAISS and ChromaDB return [0, 1] similarity where 1.0 = best match
         vector_score = next((score for i, score in vector_results if i == idx), 0.0)
         
-        # Apply similarity threshold
+        # Apply similarity threshold (reject if below threshold)
+        # Threshold is on [0, 1] scale; higher threshold = stricter matching
         if vector_score < SIMILARITY_THRESHOLD:
             continue
         
@@ -398,8 +416,8 @@ def search(query: str, k: int = 15) -> List[Dict]:
             "faiss_score": vector_score,
         })
     
-    # Rerank if enabled
-    if ENABLE_RERANKER and results:
+    # Rerank if enabled (use effective flag)
+    if effective_reranker and results:
         results = rerank_results(query, results)
     
     return results
@@ -443,16 +461,38 @@ def generate_answer(query: str, results: List[Dict]) -> Tuple[str, str]:
         )
         return completion.choices[0].message.content, "groq"
 
+# Health check state management
+_gemini_last_quota_error = 0
+_groq_last_quota_error = 0
+_last_health_check_time = 0
+_last_health_results = {"gemini": "unknown", "groq": "unknown"}
+GEMINI_COOLDOWN_SEC = 300   # 5 minutes
+GROQ_COOLDOWN_SEC = 300     # 5 minutes
+HEALTH_CACHE_SEC = 60       # 1 minute
+
 def check_llm_health() -> Dict[str, str]:
     """
-    Check health of LLM providers.
+    Check health of LLM providers with throttling and cooldowns.
     Returns dict with status for each provider.
     """
+    global _last_health_check_time, _last_health_results
     import concurrent.futures
+    import time
     
+    now = time.time()
+    
+    # Global throttling: Return cached results if called too frequently
+    if now - _last_health_check_time < HEALTH_CACHE_SEC:
+        return _last_health_results
+    
+    _last_health_check_time = now
     results = {"gemini": "unknown", "groq": "unknown"}
     
     def check_gemini():
+        global _gemini_last_quota_error
+        if time.time() - _gemini_last_quota_error < GEMINI_COOLDOWN_SEC:
+            return "quota_exceeded_cooldown"
+            
         try:
             res = gemini_client.models.generate_content(
                 model="gemini-2.0-flash", 
@@ -461,10 +501,19 @@ def check_llm_health() -> Dict[str, str]:
             )
             return "ok" if "OK" in res.text or "ok" in res.text else "degraded"
         except Exception as e:
+            err_str = str(e).lower()
+            if "429" in err_str or "resource_exhausted" in err_str or "quota" in err_str:
+                _gemini_last_quota_error = time.time()
+                logger.warning("Gemini quota exhausted (Health Check)")
+                return "quota_exceeded"
             logger.warning(f"Gemini health check failed: {e}")
             return "down"
     
     def check_groq():
+        global _groq_last_quota_error
+        if time.time() - _groq_last_quota_error < GROQ_COOLDOWN_SEC:
+            return "quota_exceeded_cooldown"
+
         try:
             completion = groq_client.chat.completions.create(
                 model="llama-3.1-8b-instant",
@@ -474,6 +523,11 @@ def check_llm_health() -> Dict[str, str]:
             msg = completion.choices[0].message.content
             return "ok" if "OK" in msg or "ok" in msg else "degraded"
         except Exception as e:
+            err_str = str(e).lower()
+            if "429" in err_str or "rate_limit_exceeded" in err_str or "quota" in err_str:
+                _groq_last_quota_error = time.time()
+                logger.warning("Groq quota exhausted (Health Check)")
+                return "quota_exceeded"
             logger.warning(f"Groq health check failed: {e}")
             return "down"
     
@@ -483,21 +537,16 @@ def check_llm_health() -> Dict[str, str]:
         groq_future = executor.submit(check_groq)
         
         try:
-            results["gemini"] = gemini_future.result(timeout=3)
-        except concurrent.futures.TimeoutError:
+            results["gemini"] = gemini_future.result(timeout=4)
+        except Exception:
             results["gemini"] = "timeout"
-        except Exception as e:
-            results["gemini"] = "down"
-            logger.error(f"Gemini health check error: {e}")
         
         try:
-            results["groq"] = groq_future.result(timeout=3)
-        except concurrent.futures.TimeoutError:
+            results["groq"] = groq_future.result(timeout=4)
+        except Exception:
             results["groq"] = "timeout"
-        except Exception as e:
-            results["groq"] = "down"
-            logger.error(f"Groq health check error: {e}")
     
+    _last_health_results = results
     return results
 
 # ─────────────────────────────────────────
