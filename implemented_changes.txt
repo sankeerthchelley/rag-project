@@ -1,0 +1,41 @@
+# Hushly RAG - Implemented Changes History
+
+This file tracks the major milestones and technical changes implemented in the Hushly RAG project.
+
+---
+
+### [Phase 1] Project Initialization
+- Initialized local Git repository and connected to remote version control.
+- Configured `.gitignore` to exclude environment variables and logs.
+- Established the base Flask framework and FAISS-based retrieval system.
+
+### [Phase 2] Voice UX & Interactive Features
+- **Speech-to-Text & Text-to-Speech**: Integrated browser-native voice pipelines.
+- **Waveform Visualizers**: Added dynamic CSS/JS waveform animations for voice interaction.
+- **Flow Engine**: Developed logic to extract and present chronological steps for actionable tasks.
+- **UI Revamp**: Updated the interface with a glassmorphic, premium "Cyber-Utility" design.
+
+### [Phase 3] Scalability & Deployment
+- **Render Deployment**: Successfully deployed the application to Render cloud services.
+- **OpenRouter Integration**: Switched to OpenRouter as the primary LLM provider to resolve API quota limitations.
+- **Query Enhancement**: Added a `/enhance` endpoint to rewrite vague queries for better search accuracy.
+- **Context Stability**: Restricted conversation history to the last 3 turns to optimize LLM performance and context window usage.
+
+### [Phase 4] Repository Optimization
+- **Git Cleanup**: Removed large binary `.bin` index files from Git history using `git rm --cached`.
+- **Ignore Rules**: Updated `.gitignore` to permanently prevent tracking of FAISS shards and binary assets.
+
+### [Phase 5] Stability & Production Readiness
+- **Rate Limiting**: Implemented Flask-Limiter with specific tiers for `/ask`, `/enhance`, and `/feedback`.
+- **Health Checks**: Optimized the `/health` endpoint with a 3s timeout for LLM status checks.
+- **Topic Guardrails**: Added strict list of "Hushly Topics" to prevent the bot from answering off-topic or irrelevant queries.
+- **Injection Protection**: Implemented regex-based protection against prompt injection attacks.
+
+### [Phase 6] LLM Provider Consolidation (Latest)
+- **Gemini Removal**: Fully removed Google Gemini API integration to simplify the architecture.
+- **OpenRouter Primary**: Set OpenRouter as the main gateway for all model requests.
+- **Groq Fallback**: Configured Groq as a robust secondary provider to handle failovers gracefully.
+- **API Verification**: Created verification scripts to test API connectivity and model response quality.
+
+---
+*Last updated: April 14, 2026*

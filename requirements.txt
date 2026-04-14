@@ -4,9 +4,10 @@ flask-limiter
 faiss-cpu
 numpy
 sentence-transformers
-google-genai
+# google-genai removed
 groq
 python-dotenv
+openai
 gunicorn
 loguru
 cachetools

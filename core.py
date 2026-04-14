@@ -20,8 +20,8 @@ from datetime import datetime
 import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from google import genai
 from groq import Groq
+from openai import OpenAI
 from dotenv import load_dotenv
 from loguru import logger
 from cachetools import TTLCache
@@ -55,8 +55,11 @@ logger.add("logs/rag.log", rotation="1 day", retention="7 days", level="INFO")
 # ─────────────────────────────────────────
 # AI CLIENTS
 # ─────────────────────────────────────────
-gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+openrouter_client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+)
 
 # ─────────────────────────────────────────
 # LOAD CHUNKS & METADATA
@@ -224,12 +227,12 @@ def build_faiss_index():
     with open(FAISS_TEXTS_FILE, "wb") as f:
         pickle.dump({"count": len(child_texts)}, f)
     
-    print(f"[FAISS] Built and saved — {index.ntotal} vectors (cosine similarity) ✅")
+    print(f"[FAISS] Built and saved — {index.ntotal} vectors (cosine similarity) [OK]")
     return index
 
 # Load or build FAISS index
 if os.path.exists(FAISS_INDEX_FILE) and os.path.exists(FAISS_TEXTS_FILE):
-    print("[FAISS] Loading saved cosine index from disk — fast restart ✅")
+    print("[FAISS] Loading saved cosine index from disk — fast restart [OK]")
     index = faiss.read_index(FAISS_INDEX_FILE)
     with open(FAISS_TEXTS_FILE, "rb") as f:
         saved_meta = pickle.load(f)
@@ -446,28 +449,40 @@ def generate_answer(query: str, results: List[Dict]) -> Tuple[str, str]:
         prompt_template = f.read()
     prompt = prompt_template.replace("{context}", context).replace("{query}", query)
     
-    # Try Gemini first, fall back to Groq
+    # Fallback Chain: OpenRouter -> Groq
+    # Try OpenRouter first (Primary)
     try:
-        response = gemini_client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt
+        or_model = os.getenv("OPENROUTER_MODEL", "openrouter/free")
+        completion = openrouter_client.chat.completions.create(
+            model=or_model,
+            messages=[{"role": "user", "content": prompt}],
+            extra_headers={
+                "HTTP-Referer": "https://hushly.com", # Optional, for OpenRouter rankings
+                "X-Title": "Hushly RAG Assistant",    # Optional
+            }
         )
-        return response.text, "gemini"
+        return completion.choices[0].message.content, "openrouter"
     except Exception as e:
-        logger.warning(f"Gemini failed: {e} — falling back to Groq")
+        logger.warning(f"OpenRouter failed: {e} — falling back to Groq")
+
+    # Try Groq second (Fallback)
+    try:
         completion = groq_client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}]
         )
         return completion.choices[0].message.content, "groq"
+    except Exception as e:
+        logger.error(f"All AI providers failed: {e}")
+        return "I'm having trouble connecting to my AI providers. Please try again in a moment.", "error"
 
 # Health check state management
-_gemini_last_quota_error = 0
 _groq_last_quota_error = 0
+_openrouter_last_quota_error = 0
 _last_health_check_time = 0
-_last_health_results = {"gemini": "unknown", "groq": "unknown"}
-GEMINI_COOLDOWN_SEC = 300   # 5 minutes
+_last_health_results = {"groq": "unknown", "openrouter": "unknown"}
 GROQ_COOLDOWN_SEC = 300     # 5 minutes
+OPENROUTER_COOLDOWN_SEC = 300 # 5 minutes
 HEALTH_CACHE_SEC = 60       # 1 minute
 
 def check_llm_health() -> Dict[str, str]:
@@ -486,28 +501,7 @@ def check_llm_health() -> Dict[str, str]:
         return _last_health_results
     
     _last_health_check_time = now
-    results = {"gemini": "unknown", "groq": "unknown"}
-    
-    def check_gemini():
-        global _gemini_last_quota_error
-        if time.time() - _gemini_last_quota_error < GEMINI_COOLDOWN_SEC:
-            return "quota_exceeded_cooldown"
-            
-        try:
-            res = gemini_client.models.generate_content(
-                model="gemini-2.0-flash", 
-                contents="Say OK",
-                config={"max_output_tokens": 10}
-            )
-            return "ok" if "OK" in res.text or "ok" in res.text else "degraded"
-        except Exception as e:
-            err_str = str(e).lower()
-            if "429" in err_str or "resource_exhausted" in err_str or "quota" in err_str:
-                _gemini_last_quota_error = time.time()
-                logger.warning("Gemini quota exhausted (Health Check)")
-                return "quota_exceeded"
-            logger.warning(f"Gemini health check failed: {e}")
-            return "down"
+    results = {"groq": "unknown", "openrouter": "unknown"}
     
     def check_groq():
         global _groq_last_quota_error
@@ -531,20 +525,43 @@ def check_llm_health() -> Dict[str, str]:
             logger.warning(f"Groq health check failed: {e}")
             return "down"
     
+    def check_openrouter():
+        global _openrouter_last_quota_error
+        if time.time() - _openrouter_last_quota_error < OPENROUTER_COOLDOWN_SEC:
+            return "quota_exceeded_cooldown"
+            
+        try:
+            or_model = os.getenv("OPENROUTER_MODEL", "openrouter/free")
+            completion = openrouter_client.chat.completions.create(
+                model=or_model,
+                messages=[{"role": "user", "content": "Say OK"}],
+                max_tokens=10
+            )
+            msg = completion.choices[0].message.content
+            return "ok" if "OK" in msg or "ok" in msg else "degraded"
+        except Exception as e:
+            err_str = str(e).lower()
+            if "429" in err_str or "quota" in err_str:
+                _openrouter_last_quota_error = time.time()
+                logger.warning("OpenRouter quota exhausted (Health Check)")
+                return "quota_exceeded"
+            logger.warning(f"OpenRouter health check failed: {e}")
+            return "down"
+    
     # Run health checks with timeout
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        gemini_future = executor.submit(check_gemini)
         groq_future = executor.submit(check_groq)
-        
-        try:
-            results["gemini"] = gemini_future.result(timeout=4)
-        except Exception:
-            results["gemini"] = "timeout"
+        openrouter_future = executor.submit(check_openrouter)
         
         try:
             results["groq"] = groq_future.result(timeout=4)
         except Exception:
             results["groq"] = "timeout"
+            
+        try:
+            results["openrouter"] = openrouter_future.result(timeout=4)
+        except Exception:
+            results["openrouter"] = "timeout"
     
     _last_health_results = results
     return results

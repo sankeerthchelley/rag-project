@@ -1,0 +1,23 @@
+# Hushly RAG Project Overview
+
+This project is a production-grade Retrieval-Augmented Generation (RAG) system specifically designed for the Hushly B2B SaaS platform. Its primary goal is to provide accurate, context-aware answers to user queries by searching through a specialized knowledge base of documentation.
+
+## Core Purpose
+To act as an AI-powered guided support tool that helps users navigate the Hushly platform, resolve technical issues, and understand platform features (like ABM, UTM tracking, asset management, and GeSherpa).
+
+## Key Features
+- **Hybrid Search**: Combines semantic search (using FAISS with cosine similarity) and lexical search (BM25) to find the most relevant documentation chunks.
+- **Cross-Encoder Reranking**: Re-evaluates top search results using a cross-encoder model to ensure the most pertinent information is prioritized.
+- **Multi-Turn Context**: Remembers the last 3 turns of a conversation to handle follow-up questions accurately.
+- **Voice Integration**: Features a native browser-based Speech-to-Text (STT) and Text-to-Speech (TTS) pipeline, including waveform visualizers for a premium voice UX.
+- **Flow Engine**: Can extract actionable step-by-step instructions from dense documentation to guide users through complex tasks.
+- **Dynamic Model Fallback**: Uses OpenRouter as the primary provider (e.g., Llama 3) with robust fallback to Groq to ensure 100% uptime.
+- **Response Caching**: Implements a TTLCache to speed up common queries while respecting user privacy (personal pronouns bypass the cache).
+- **Safety & Guardrails**: Includes topic-bound checking (Hushly-only topics) and protection against prompt injection.
+
+## Tech Stack
+- **Backend**: Flask (Python)
+- **Search/Index**: FAISS, BM25, ChromaDB (alternative)
+- **LLM Providers**: OpenRouter (Primary), Groq (Fallback)
+- **Frontend/UI**: kb.html (Glassmorphic, premium design with voice support)
+- **Evaluation**: RAGAS for measuring faithfulness and relevance

@@ -12,27 +12,17 @@ from core import search, generate_answer, groq_client
 
 # Test AI connections
 print("Testing AI connections...\n")
-try:
-    from google import genai
-    from dotenv import load_dotenv
-    import os
-    load_dotenv()
-    gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-    res = gemini_client.models.generate_content(model="gemini-2.0-flash", contents="Say OK")
-    print("✅ Gemini connected:", res.text.strip())
-except Exception as e:
-    print("❌ Gemini failed:", str(e))
 
 try:
     completion = groq_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": "Say OK"}]
     )
-    print("✅ Groq connected:", completion.choices[0].message.content.strip())
+    print("SUCCESS: Groq connected:", completion.choices[0].message.content.strip())
 except Exception as e:
-    print("❌ Groq failed:", str(e))
+    print("ERROR: Groq failed:", str(e))
 
-print("\n✅ RAG system ready!\n")
+print("\nSUCCESS: RAG system ready!\n")
 
 # ─────────────────────────────────────────
 # CHAT LOOP
