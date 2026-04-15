@@ -7,7 +7,7 @@ A production-ready Retrieval-Augmented Generation (RAG) system for the Hushly B2
 This system provides an AI-powered knowledge base assistant that:
 - Retrieves relevant documentation chunks using semantic (FAISS cosine similarity) and lexical (BM25) search
 - Reranks results using a cross-encoder for optimal relevance
-- Generates answers using Gemini (primary) or Groq/Llama (fallback)
+- Generates answers using Groq (primary) or OpenRouter (fallback)
 - Caches responses for frequently asked questions
 - Logs all requests for monitoring and evaluation
 
@@ -39,7 +39,7 @@ This system provides an AI-powered knowledge base assistant that:
 
 2. Fill in your API keys:
    ```
-   GEMINI_API_KEY=your_gemini_key
+   OPENROUTER_API_KEY=your_openrouter_key
    GROQ_API_KEY=your_groq_key
    ```
 
@@ -109,7 +109,7 @@ Response:
 ```json
 {
   "answer": "To upload an asset...",
-  "model_used": "gemini",
+  "model_used": "groq",
   "no_info": false,
   "sources": ["https://hushly.freshdesk.com/..."],
   "titles": ["Asset Upload Guide"],

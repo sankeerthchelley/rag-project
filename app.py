@@ -87,6 +87,23 @@ def is_injection(query: str) -> bool:
     query_lower = query.lower()
     return any(re.search(pattern, query_lower) for pattern in INJECTION_PATTERNS)
 
+# Reference words that signal a follow-up question needing prior context
+_FOLLOWUP_PRONOUNS = {"it", "this", "that", "these", "those", "they", "them", "there"}
+_FOLLOWUP_PHRASES = ["what about", "how about", "tell me more", "explain more", "what else", "and the"]
+
+def is_followup_question(query: str) -> bool:
+    """
+    Returns True only when the query is clearly a follow-up to the previous turn.
+    Standalone new-topic questions return False — they skip reformulation entirely.
+    """
+    q = query.lower().strip()
+    words = set(q.split())
+    if len(words) <= 4:
+        return True
+    if words & _FOLLOWUP_PRONOUNS:
+        return True
+    return any(phrase in q for phrase in _FOLLOWUP_PHRASES)
+
 # ─────────────────────────────────────────
 # ROUTES
 # ─────────────────────────────────────────
@@ -159,13 +176,15 @@ def ask():
                 "cached": True
             })
 
-        # Query Reformulation: Use only the last 3 turns for context stability
+        # Query Reformulation: only runs when query is a follow-up (contains reference
+        # pronouns, is very short, or uses bridging phrases). New-topic questions skip
+        # this entirely — no history bias, no extra latency.
         search_query = query
-        if history:
+        if history and is_followup_question(query):
             try:
-                context_history = history[-3:] 
+                context_history = history[-3:]
                 history_text = "\n".join([f"{msg['role'].capitalize()}: {msg['content']}" for msg in context_history])
-                
+
                 rewrite_prompt = f"""Given the conversation history below, rewrite the user's latest follow-up question into a standalone, fully contextualized question. Do not answer it, just rewrite it so it can be used for a database search keyword lookup. Output ONLY the standalone question.
 
 Conversation History (Latest Turns):
@@ -174,15 +193,15 @@ Conversation History (Latest Turns):
 Latest raw question: {query}
 
 Standalone question:"""
-                
+
                 rewrite_comp = groq_client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
+                    model="llama-3.1-8b-instant",
                     messages=[{"role": "user", "content": rewrite_prompt}],
                     max_tokens=100,
                     temperature=0.1
                 )
                 search_query = sanitize_query(rewrite_comp.choices[0].message.content.strip().strip('"\''))
-            except Exception as e:
+            except Exception:
                 pass  # Silently fall back to original query
 
         # Search and generate answer
@@ -377,4 +396,5 @@ def feedback():
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
-    app.run(host="0.0.0.0", port=port, debug=True, use_reloader=False)
+    debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    app.run(host="0.0.0.0", port=port, debug=debug_mode, use_reloader=False)

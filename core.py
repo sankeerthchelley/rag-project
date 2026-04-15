@@ -104,6 +104,10 @@ parent_ids = [c.get("parent_chunk_id", "") for c in children]
 
 print(f"[LOAD] {len(children)} child chunks | {len(parents)} parent chunks")
 
+# Cache prompt template once at startup — avoids disk read on every request
+with open("prompt.txt", "r", encoding="utf-8") as f:
+    _PROMPT_TEMPLATE = f.read()
+
 # ─────────────────────────────────────────
 # EMBEDDING MODEL & FAISS INDEX
 # ─────────────────────────────────────────
@@ -457,16 +461,23 @@ def generate_answer(query: str, results: List[Dict]) -> Tuple[str, str]:
     
     # Trim context to ~3000 tokens max
     context = context[:12000]
+
+    prompt = _PROMPT_TEMPLATE.replace("{context}", context).replace("{query}", query)
     
-    # Read prompt template from file
-    with open("prompt.txt", "r", encoding="utf-8") as f:
-        prompt_template = f.read()
-    prompt = prompt_template.replace("{context}", context).replace("{query}", query)
-    
-    # Fallback Chain: OpenRouter -> Groq
-    # Try OpenRouter first (Primary)
+    # Fallback Chain: Groq -> OpenRouter
+    # Try Groq first (Primary)
+    try:
+        completion = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return completion.choices[0].message.content, "groq"
+    except Exception as e:
+        logger.warning(f"Groq failed: {e} - falling back to OpenRouter")
+
+    # Try OpenRouter second (Fallback)
     if openrouter_client is None:
-        logger.warning("OpenRouter client not initialized (missing API key) — skipping to Groq")
+        logger.warning("OpenRouter client not initialized (missing API key) - no fallback available")
     else:
         try:
             or_model = os.getenv("OPENROUTER_MODEL", "openrouter/free")
@@ -480,18 +491,9 @@ def generate_answer(query: str, results: List[Dict]) -> Tuple[str, str]:
             )
             return completion.choices[0].message.content, "openrouter"
         except Exception as e:
-            logger.warning(f"OpenRouter failed: {e} — falling back to Groq")
-
-    # Try Groq second (Fallback)
-    try:
-        completion = groq_client.chat.completions.create(
-            model="llama-3.1-8b-instant",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return completion.choices[0].message.content, "groq"
-    except Exception as e:
-        logger.error(f"All AI providers failed: {e}")
-        return "I'm having trouble connecting to my AI providers. Please try again in a moment.", "error"
+            logger.error(f"OpenRouter fallback failed: {e}")
+    
+    return "I'm having trouble connecting to my AI providers. Please try again in a moment.", "error"
 
 # Health check state management
 _groq_last_quota_error = 0
