@@ -56,10 +56,16 @@ logger.add("logs/rag.log", rotation="1 day", retention="7 days", level="INFO")
 # AI CLIENTS
 # ─────────────────────────────────────────
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-openrouter_client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-)
+
+_openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+if _openrouter_api_key:
+    openrouter_client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=_openrouter_api_key,
+    )
+else:
+    print("[WARN] OPENROUTER_API_KEY not set — OpenRouter will be unavailable")
+    openrouter_client = None
 
 # ─────────────────────────────────────────
 # LOAD CHUNKS & METADATA
@@ -459,19 +465,22 @@ def generate_answer(query: str, results: List[Dict]) -> Tuple[str, str]:
     
     # Fallback Chain: OpenRouter -> Groq
     # Try OpenRouter first (Primary)
-    try:
-        or_model = os.getenv("OPENROUTER_MODEL", "openrouter/free")
-        completion = openrouter_client.chat.completions.create(
-            model=or_model,
-            messages=[{"role": "user", "content": prompt}],
-            extra_headers={
-                "HTTP-Referer": "https://hushly.com", # Optional, for OpenRouter rankings
-                "X-Title": "Hushly RAG Assistant",    # Optional
-            }
-        )
-        return completion.choices[0].message.content, "openrouter"
-    except Exception as e:
-        logger.warning(f"OpenRouter failed: {e} — falling back to Groq")
+    if openrouter_client is None:
+        logger.warning("OpenRouter client not initialized (missing API key) — skipping to Groq")
+    else:
+        try:
+            or_model = os.getenv("OPENROUTER_MODEL", "openrouter/free")
+            completion = openrouter_client.chat.completions.create(
+                model=or_model,
+                messages=[{"role": "user", "content": prompt}],
+                extra_headers={
+                    "HTTP-Referer": "https://hushly.com",
+                    "X-Title": "Hushly RAG Assistant",
+                }
+            )
+            return completion.choices[0].message.content, "openrouter"
+        except Exception as e:
+            logger.warning(f"OpenRouter failed: {e} — falling back to Groq")
 
     # Try Groq second (Fallback)
     try:
@@ -534,10 +543,12 @@ def check_llm_health() -> Dict[str, str]:
             return "down"
     
     def check_openrouter():
+        if openrouter_client is None:
+            return "unavailable"
         global _openrouter_last_quota_error
         if time.time() - _openrouter_last_quota_error < OPENROUTER_COOLDOWN_SEC:
             return "quota_exceeded_cooldown"
-            
+
         try:
             or_model = os.getenv("OPENROUTER_MODEL", "openrouter/free")
             completion = openrouter_client.chat.completions.create(
