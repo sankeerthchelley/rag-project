@@ -101,7 +101,11 @@ print(f"[LOAD] {len(children)} child chunks | {len(parents)} parent chunks")
 # ─────────────────────────────────────────
 # EMBEDDING MODEL & FAISS INDEX
 # ─────────────────────────────────────────
-model = SentenceTransformer(EMBED_MODEL_NAME)
+try:
+    model = SentenceTransformer(EMBED_MODEL_NAME)
+except Exception as e:
+    print(f"[MODEL] ERROR loading embedding model: {e}")
+    model = None
 
 # Reranker (cross-encoder) - initialize at startup if enabled
 _reranker = None
@@ -231,20 +235,24 @@ def build_faiss_index():
     return index
 
 # Load or build FAISS index
-if os.path.exists(FAISS_INDEX_FILE) and os.path.exists(FAISS_TEXTS_FILE):
-    print("[FAISS] Loading saved cosine index from disk — fast restart [OK]")
-    index = faiss.read_index(FAISS_INDEX_FILE)
-    with open(FAISS_TEXTS_FILE, "rb") as f:
-        saved_meta = pickle.load(f)
-    if saved_meta.get("count") != len(child_texts):
-        print("[FAISS] Chunk count changed — rebuilding index...")
-        os.remove(FAISS_INDEX_FILE)
-        os.remove(FAISS_TEXTS_FILE)
-        index = build_faiss_index()
+try:
+    if os.path.exists(FAISS_INDEX_FILE) and os.path.exists(FAISS_TEXTS_FILE):
+        print("[FAISS] Loading saved cosine index from disk — fast restart [OK]")
+        index = faiss.read_index(FAISS_INDEX_FILE)
+        with open(FAISS_TEXTS_FILE, "rb") as f:
+            saved_meta = pickle.load(f)
+        if saved_meta.get("count") != len(child_texts):
+            print("[FAISS] Chunk count changed — rebuilding index...")
+            os.remove(FAISS_INDEX_FILE)
+            os.remove(FAISS_TEXTS_FILE)
+            index = build_faiss_index()
+        else:
+            print(f"[FAISS] Index loaded — {index.ntotal} vectors ready (cosine similarity)")
     else:
-        print(f"[FAISS] Index loaded — {index.ntotal} vectors ready (cosine similarity)")
-else:
-    index = build_faiss_index()
+        index = build_faiss_index()
+except Exception as e:
+    print(f"[FAISS] ERROR during index load/build: {e}")
+    index = None
 
 # ─────────────────────────────────────────
 # SEARCH FUNCTIONS
