@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hushly Guide</title>
+  <!-- Libraries bundled locally — CDN scripts are blocked by MV3 CSP -->
+  <script src="lib/marked.min.js"></script>
+  <script src="lib/lucide.min.js"></script>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+
+  <div class="wrapper">
+
+    <!-- Header -->
+    <div class="header">
+      <div class="header-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+      </div>
+      <div class="header-text">
+        <h1>Hushly Guide</h1>
+        <p id="headerSubtitle">Ask anything about Hushly</p>
+      </div>
+      <button class="icon-header-btn" id="popoutBtn" data-action="pop-out" title="Pop out to window">
+        <i data-lucide="external-link"></i>
+      </button>
+      <button class="pin-btn"      id="pinBtn"      data-action="open-page-assistant" title="Open as page assistant">
+        <i data-lucide="panel-right"></i>
+      </button>
+      <button class="settings-btn" id="settingsBtn" data-action="toggle-settings"     title="Settings">
+        <i data-lucide="settings"></i>
+      </button>
+    </div>
+
+    <!-- Popout mode: drag handle + attach button (hidden in normal popup) -->
+    <div class="popout-bar" id="popoutBar" style="display:none">
+      <div class="popout-drag-handle" id="popoutDragHandle">
+        <span class="drag-dots">⠿</span>
+        <span class="drag-label">Drag to move</span>
+      </div>
+      <button class="popout-attach-btn" data-action="attach-to-page" title="Dock as page sidebar">
+        <i data-lucide="panel-right"></i> Attach to Page
+      </button>
+    </div>
+
+    <!-- Settings Panel -->
+    <div class="settings-panel" id="settingsPanel" style="display:none">
+      <div class="settings-row">
+        <label>Backend URL</label>
+        <input id="backendUrlInput" type="text" placeholder="http://localhost:8000" />
+      </div>
+      <button class="settings-save-btn" data-action="save-settings">Save</button>
+    </div>
+
+    <!-- Connection Banner -->
+    <div class="chat-banner" id="chatBanner">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/>
+        <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/>
+        <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/>
+        <line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/>
+        <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/>
+        <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/>
+      </svg>
+      Connecting to server...
+    </div>
+
+    <!-- Chat Container -->
+    <div class="chat-container">
+
+      <!-- Guide Mode Indicator -->
+      <div class="guide-mode-bar" id="guideModeBar" style="display:none">
+        <div class="guide-mode-info">
+          <span class="guide-mode-icon" id="guideModeIcon">🎤</span>
+          <span id="guideModeLabel">Voice Guide Active</span>
+          <span class="guide-step-counter" id="guideStepCounter">Step 1 of 5</span>
+        </div>
+        <button class="guide-stop-btn" data-action="stop-guide" title="Stop guide">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+
+      <!-- Messages -->
+      <div class="messages" id="messages">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-state-icon">
+            <i data-lucide="message-square"></i>
+          </div>
+          <h3>How can I help you?</h3>
+          <p>Ask about Hushly features, workflows, or get a step-by-step guide.</p>
+          <div class="suggestions" id="suggestionContainer"></div>
+        </div>
+      </div>
+
+      <!-- Audio Visualizer -->
+      <div class="visualizer" id="visualizer">
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      </div>
+
+      <!-- Input Area -->
+      <div class="input-area">
+        <div class="input-wrap">
+          <i data-lucide="search" class="search-icon"></i>
+          <input id="input" placeholder="Server connecting..." autocomplete="off" disabled />
+          <div class="input-actions">
+            <button class="icon-btn enhance-btn" id="enhanceBtn" data-action="enhance-query" title="Enhance query" disabled>
+              <i data-lucide="sparkles"></i>
+            </button>
+            <button class="icon-btn page-context-btn" id="pageContextBtn" data-action="analyze-page" title="Explain this page" disabled>
+              <i data-lucide="scan-eye"></i>
+            </button>
+            <button class="icon-btn mic-btn" id="micBtn" data-action="toggle-mic" title="Voice input" disabled>
+              <i data-lucide="mic"></i>
+            </button>
+            <button class="icon-btn send-btn" id="sendBtn" data-action="send" title="Send" disabled>
+              <i data-lucide="send"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span id="statusDotIndicator" class="status-dot"></span>
+      <span id="statusTextWidget">Connecting...</span>
+    </div>
+
+  </div>
+
+  <!-- Mini status bar shown when guide is active (replaces full popup) -->
+  <div id="guide-mini-bar">
+    <div class="gmb-dot"></div>
+    <div class="gmb-info">
+      <span class="gmb-title" id="gmbTitle">Guide running</span>
+      <span class="gmb-step"  id="gmbStep"></span>
+    </div>
+    <button class="gmb-stop" data-action="stop-guide" title="Stop guide">✕ Stop</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

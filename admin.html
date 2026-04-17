@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hushly Guide — Admin</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    font-size: 13px;
+    min-height: 100vh;
+  }
+
+  /* ── Layout ── */
+  .layout { display: flex; min-height: 100vh; }
+
+  .sidebar {
+    width: 220px; flex-shrink: 0;
+    background: #1a1d27;
+    border-right: 1px solid rgba(255,255,255,0.06);
+    padding: 24px 0;
+    position: sticky; top: 0; height: 100vh;
+  }
+
+  .sidebar-logo {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 20px 24px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    margin-bottom: 16px;
+  }
+  .sidebar-logo-dot {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: linear-gradient(135deg, #307fe2, #1a5db8);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 800; color: white; flex-shrink: 0;
+  }
+  .sidebar-logo span { font-weight: 700; font-size: 14px; color: #f1f5f9; }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 20px; cursor: pointer; border: none;
+    background: none; color: rgba(255,255,255,0.5);
+    font-size: 13px; width: 100%; text-align: left;
+    transition: background 0.15s, color 0.15s; border-radius: 0;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.05); color: #e2e8f0; }
+  .nav-item.active { background: rgba(48,127,226,0.12); color: #60a5fa; }
+  .nav-item .nav-icon { font-size: 15px; width: 20px; text-align: center; }
+  .nav-badge {
+    margin-left: auto; background: #ef4444;
+    color: white; font-size: 10px; font-weight: 700;
+    padding: 1px 6px; border-radius: 99px;
+  }
+
+  .main { flex: 1; padding: 32px 36px; overflow-y: auto; }
+
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ── Page header ── */
+  .page-header { margin-bottom: 24px; }
+  .page-header h1 { font-size: 20px; font-weight: 700; color: #f1f5f9; margin-bottom: 4px; }
+  .page-header p  { color: rgba(255,255,255,0.45); font-size: 12.5px; }
+
+  /* ── Stats row ── */
+  .stats-row { display: flex; gap: 14px; margin-bottom: 28px; flex-wrap: wrap; }
+  .stat-card {
+    flex: 1; min-width: 130px;
+    background: #1a1d27; border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px; padding: 16px 18px;
+  }
+  .stat-label { font-size: 11px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .stat-value { font-size: 26px; font-weight: 700; color: #f1f5f9; }
+  .stat-value.orange { color: #fb923c; }
+  .stat-value.red    { color: #f87171; }
+  .stat-value.green  { color: #4ade80; }
+
+  /* ── Table ── */
+  .card {
+    background: #1a1d27; border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px; overflow: hidden;
+  }
+  .card-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .card-title { font-size: 14px; font-weight: 600; color: #f1f5f9; }
+  .card-subtitle { font-size: 11.5px; color: rgba(255,255,255,0.35); margin-top: 2px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    text-align: left; padding: 10px 16px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.5px;
+    text-transform: uppercase; color: rgba(255,255,255,0.3);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  td {
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    vertical-align: top; color: #cbd5e1; font-size: 12.5px;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  /* ── Status badges ── */
+  .badge {
+    display: inline-block;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+    text-transform: uppercase; padding: 3px 9px; border-radius: 99px;
+  }
+  .badge-auto      { background: rgba(251,191,36,0.12); color: #fbbf24; border: 1px solid rgba(251,191,36,0.25); }
+  .badge-validated { background: rgba(74,222,128,0.12); color: #4ade80; border: 1px solid rgba(74,222,128,0.25); }
+  .badge-flagged   { background: rgba(248,113,113,0.12); color: #f87171; border: 1px solid rgba(248,113,113,0.25); }
+  .badge-corrected { background: rgba(96,165,250,0.12); color: #60a5fa; border: 1px solid rgba(96,165,250,0.25); }
+  .badge-pending   { background: rgba(248,113,113,0.12); color: #f87171; border: 1px solid rgba(248,113,113,0.25); }
+  .badge-resolved  { background: rgba(74,222,128,0.12); color: #4ade80; border: 1px solid rgba(74,222,128,0.25); }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 12px; border-radius: 7px; border: none;
+    font-size: 11.5px; font-weight: 600; cursor: pointer;
+    transition: opacity 0.15s; font-family: inherit;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary   { background: #307fe2; color: white; }
+  .btn-success   { background: rgba(74,222,128,0.15); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); }
+  .btn-danger    { background: rgba(248,113,113,0.12); color: #f87171; border: 1px solid rgba(248,113,113,0.25); }
+  .btn-neutral   { background: rgba(255,255,255,0.07); color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); }
+  .btn-sm { padding: 3px 9px; font-size: 10.5px; }
+  .btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  /* ── Edit steps modal ── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7); z-index: 1000;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: #1e2130; border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px; padding: 28px; width: 660px; max-width: 95vw;
+    max-height: 85vh; overflow-y: auto;
+  }
+  .modal h2 { font-size: 16px; font-weight: 700; color: #f1f5f9; margin-bottom: 4px; }
+  .modal-sub { font-size: 12px; color: rgba(255,255,255,0.35); margin-bottom: 20px; }
+
+  .step-editor {
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 10px;
+  }
+  .step-editor-row { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 8px; }
+  .step-editor label { font-size: 10px; color: rgba(255,255,255,0.35); text-transform: uppercase; letter-spacing: 0.4px; display: block; margin-bottom: 4px; }
+  .step-editor input, .step-editor textarea {
+    width: 100%; background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 6px;
+    color: #e2e8f0; font-family: inherit; font-size: 12.5px;
+    padding: 7px 10px; outline: none;
+  }
+  .step-editor input:focus, .step-editor textarea:focus { border-color: #307fe2; }
+  .step-editor textarea { resize: vertical; min-height: 50px; }
+
+  .step-num-badge {
+    background: #307fe2; color: white; font-size: 11px; font-weight: 700;
+    width: 24px; height: 24px; border-radius: 50%; display: flex;
+    align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px;
+  }
+
+  .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.08); }
+
+  /* ── Empty state ── */
+  .empty { padding: 48px 24px; text-align: center; color: rgba(255,255,255,0.25); font-size: 13px; }
+  .empty-icon { font-size: 32px; margin-bottom: 10px; }
+
+  /* ── Path steps expand ── */
+  .steps-preview {
+    font-size: 11.5px; color: rgba(255,255,255,0.35);
+    margin-top: 4px; line-height: 1.6;
+  }
+  .steps-preview .step-item { display: flex; gap: 6px; align-items: flex-start; }
+  .step-dot { width: 5px; height: 5px; border-radius: 50%; background: #307fe2; flex-shrink: 0; margin-top: 6px; }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: #1e2130; border: 1px solid rgba(255,255,255,0.12);
+    color: #e2e8f0; padding: 10px 20px; border-radius: 10px;
+    font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    opacity: 0; transition: opacity 0.2s; pointer-events: none; z-index: 2000;
+    white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-dot">H</div>
+      <span>Guide Admin</span>
+    </div>
+    <button class="nav-item active" data-page="paths">
+      <span class="nav-icon">🗺️</span> Guide Paths
+    </button>
+    <button class="nav-item" data-page="feedback">
+      <span class="nav-icon">⚑</span> Feedback
+      <span class="nav-badge" id="feedbackBadge" style="display:none">0</span>
+    </button>
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="main">
+
+    <!-- PATHS PAGE -->
+    <div class="page active" id="page-paths">
+      <div class="page-header">
+        <h1>Guide Paths</h1>
+        <p>Stored UI navigation paths. Validated paths are used directly without LLM calls.</p>
+      </div>
+
+      <div class="stats-row" id="pathsStats"></div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">All Paths</div>
+            <div class="card-subtitle">Click a row to edit steps • Use ✓ Validate or ✕ Ignore to manage status</div>
+          </div>
+          <button class="btn btn-neutral btn-sm" onclick="loadPaths()">↻ Refresh</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Task</th>
+              <th>Status</th>
+              <th>Steps</th>
+              <th>Uses</th>
+              <th>Updated</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="pathsTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- FEEDBACK PAGE -->
+    <div class="page" id="page-feedback">
+      <div class="page-header">
+        <h1>Step Feedback</h1>
+        <p>User-reported issues with guide steps. Confirm the path is correct, or correct the steps.</p>
+      </div>
+
+      <div class="stats-row" id="feedbackStats"></div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Pending Feedback</div>
+            <div class="card-subtitle">Confirm = path is good (unflag). Correct = edit steps and save. Ignore = dismiss without changes.</div>
+          </div>
+          <button class="btn btn-neutral btn-sm" onclick="loadFeedback()">↻ Refresh</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Path</th>
+              <th>Step</th>
+              <th>Issue</th>
+              <th>Page</th>
+              <th>When</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="feedbackTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── Edit Steps Modal ── -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h2 id="editModalTitle">Edit Path Steps</h2>
+    <div class="modal-sub" id="editModalSub"></div>
+    <div id="editStepsContainer"></div>
+    <div class="modal-footer">
+      <button class="btn btn-neutral" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveModalSteps()">Save & Validate</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── State ────────────────────────────────────
+let allPaths    = {};
+let allFeedback = [];
+let editingPathId     = null;
+let editingFeedbackId = null;
+
+// ── Navigation ──────────────────────────────
+document.querySelectorAll(".nav-item[data-page]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".nav-item").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("page-" + btn.dataset.page).classList.add("active");
+  });
+});
+
+// ── Load on start ────────────────────────────
+loadPaths();
+loadFeedback();
+
+// ── PATHS ────────────────────────────────────
+async function loadPaths() {
+  try {
+    const res  = await fetch("/admin/api/paths");
+    allPaths   = await res.json();
+    renderPaths();
+  } catch (e) { showToast("Error loading paths: " + e.message); }
+}
+
+function renderPaths() {
+  const paths = Object.values(allPaths);
+
+  // Stats
+  const counts = { auto: 0, validated: 0, flagged: 0, corrected: 0 };
+  paths.forEach(p => { counts[p.status] = (counts[p.status] || 0) + 1; });
+  document.getElementById("pathsStats").innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total Paths</div><div class="stat-value">${paths.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Validated</div><div class="stat-value green">${counts.validated || 0}</div></div>
+    <div class="stat-card"><div class="stat-label">Flagged</div><div class="stat-value red">${counts.flagged || 0}</div></div>
+    <div class="stat-card"><div class="stat-label">Auto (review)</div><div class="stat-value orange">${counts.auto || 0}</div></div>`;
+
+  const tbody = document.getElementById("pathsTable");
+  if (!paths.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><div class="empty-icon">🗺️</div>No paths stored yet. Complete a Live Guide to generate one.</div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = paths.sort((a, b) => {
+    const order = { flagged: 0, auto: 1, corrected: 2, validated: 3 };
+    return (order[a.status] ?? 9) - (order[b.status] ?? 9);
+  }).map(p => `
+    <tr>
+      <td>
+        <div style="font-weight:600;color:#f1f5f9">${esc(p.task_title)}</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.3);margin-top:2px">${esc((p.keywords||[]).slice(0,4).join(", "))}</div>
+      </td>
+      <td><span class="badge badge-${p.status}">${p.status}</span></td>
+      <td>
+        <div>${(p.steps||[]).length} steps</div>
+        <div class="steps-preview">${(p.steps||[]).slice(0,2).map((s,i) => `
+          <div class="step-item"><div class="step-dot"></div><div>${i+1}. ${esc((s.text||"").substring(0,45))}…</div></div>`).join("")}</div>
+      </td>
+      <td>${p.use_count || 0}</td>
+      <td style="font-size:11px;color:rgba(255,255,255,0.35)">${fmtDate(p.updated_at)}</td>
+      <td>
+        <div class="btn-group">
+          <button class="btn btn-neutral btn-sm" onclick="openEditModal('${esc(p.id)}')">✏ Edit</button>
+          ${p.status !== "validated"
+            ? `<button class="btn btn-success btn-sm" onclick="updatePathStatus('${esc(p.id)}','validated')">✓ Validate</button>`
+            : `<button class="btn btn-neutral btn-sm" onclick="updatePathStatus('${esc(p.id)}','auto')">↩ Unvalidate</button>`}
+          <button class="btn btn-danger btn-sm" onclick="updatePathStatus('${esc(p.id)}','ignored')">✕ Ignore</button>
+        </div>
+      </td>
+    </tr>`).join("");
+}
+
+async function updatePathStatus(pathId, status) {
+  try {
+    await fetch(`/admin/api/paths/${pathId}`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status })
+    });
+    showToast(`Path marked as "${status}"`);
+    loadPaths();
+  } catch (e) { showToast("Error: " + e.message); }
+}
+
+// ── Edit Modal ───────────────────────────────
+function openEditModal(pathId, feedbackId) {
+  editingPathId     = pathId;
+  editingFeedbackId = feedbackId || null;
+  const path = allPaths[pathId];
+  if (!path) return;
+
+  document.getElementById("editModalTitle").textContent = `Edit: ${path.task_title}`;
+  document.getElementById("editModalSub").textContent   = feedbackId
+    ? "Correcting due to user feedback. Edit steps and click Save."
+    : `Path ID: ${pathId} · ${path.steps?.length || 0} steps`;
+
+  renderStepEditors(path.steps || []);
+  document.getElementById("editModal").classList.add("open");
+}
+
+function closeModal() {
+  document.getElementById("editModal").classList.remove("open");
+  editingPathId = editingFeedbackId = null;
+}
+
+function renderStepEditors(steps) {
+  const container = document.getElementById("editStepsContainer");
+  container.innerHTML = steps.map((s, i) => `
+    <div class="step-editor" id="step-editor-${i}">
+      <div class="step-editor-row">
+        <div class="step-num-badge">${i+1}</div>
+        <div style="flex:1">
+          <label>Instruction text</label>
+          <textarea class="step-text-input" data-idx="${i}">${esc(s.text || "")}</textarea>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <label>CSS Selector (primary)</label>
+          <input class="step-selector-input" data-idx="${i}" value="${esc(s.selector || "")}">
+        </div>
+        <div>
+          <label>Element text hint (fallback)</label>
+          <input class="step-hint-input" data-idx="${i}" value="${esc(s.element_hint || s.element_text || "")}">
+        </div>
+      </div>
+    </div>`).join("") +
+    `<button class="btn btn-neutral btn-sm" style="margin-top:8px" onclick="addStepEditor()">+ Add step</button>`;
+}
+
+function addStepEditor() {
+  const container = document.getElementById("editStepsContainer");
+  const existing  = container.querySelectorAll(".step-editor").length;
+  const div = document.createElement("div");
+  div.className = "step-editor";
+  div.id = `step-editor-${existing}`;
+  div.innerHTML = `
+    <div class="step-editor-row">
+      <div class="step-num-badge">${existing + 1}</div>
+      <div style="flex:1">
+        <label>Instruction text</label>
+        <textarea class="step-text-input" data-idx="${existing}"></textarea>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div>
+        <label>CSS Selector (primary)</label>
+        <input class="step-selector-input" data-idx="${existing}" value="">
+      </div>
+      <div>
+        <label>Element text hint (fallback)</label>
+        <input class="step-hint-input" data-idx="${existing}" value="">
+      </div>
+    </div>`;
+  container.insertBefore(div, container.lastElementChild);
+}
+
+function collectStepsFromModal() {
+  const steps = [];
+  document.querySelectorAll(".step-editor").forEach((editor, i) => {
+    const text     = editor.querySelector(".step-text-input")?.value.trim() || "";
+    const selector = editor.querySelector(".step-selector-input")?.value.trim() || "";
+    const hint     = editor.querySelector(".step-hint-input")?.value.trim() || "";
+    if (text) steps.push({ text, selector, element_hint: hint, element_text: hint, selector_fallbacks: [] });
+  });
+  return steps;
+}
+
+async function saveModalSteps() {
+  const steps = collectStepsFromModal();
+  if (!steps.length) { showToast("No steps to save."); return; }
+
+  try {
+    // Save steps to path
+    await fetch(`/admin/api/paths/${editingPathId}`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ steps, status: "validated" })
+    });
+
+    // If this was triggered from feedback, resolve it as corrected
+    if (editingFeedbackId) {
+      await fetch(`/admin/api/feedback/${editingFeedbackId}/action`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "correct", steps })
+      });
+    }
+
+    showToast("Path saved and validated ✓");
+    closeModal();
+    loadPaths();
+    loadFeedback();
+  } catch (e) { showToast("Error: " + e.message); }
+}
+
+// ── FEEDBACK ─────────────────────────────────
+async function loadFeedback() {
+  try {
+    const res    = await fetch("/admin/api/feedback");
+    allFeedback  = await res.json();
+    renderFeedback();
+  } catch (e) { showToast("Error loading feedback: " + e.message); }
+}
+
+function renderFeedback() {
+  const pending  = allFeedback.filter(f => f.status === "pending").length;
+  const resolved = allFeedback.filter(f => f.status === "resolved").length;
+
+  // Update badge
+  const badge = document.getElementById("feedbackBadge");
+  badge.style.display = pending ? "inline-block" : "none";
+  badge.textContent   = pending;
+
+  document.getElementById("feedbackStats").innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total Reports</div><div class="stat-value">${allFeedback.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Pending</div><div class="stat-value red">${pending}</div></div>
+    <div class="stat-card"><div class="stat-label">Resolved</div><div class="stat-value green">${resolved}</div></div>`;
+
+  const tbody = document.getElementById("feedbackTable");
+  if (!allFeedback.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="empty-icon">✓</div>No feedback yet.</div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = [...allFeedback].reverse().map(f => `
+    <tr>
+      <td>
+        <div style="font-weight:600;color:#f1f5f9">${esc(f.path_id || "—")}</div>
+      </td>
+      <td>Step ${(f.step_idx ?? -1) + 1}</td>
+      <td>
+        <span style="color:#fbbf24;font-size:11.5px">${issueLabel(f.issue)}</span>
+      </td>
+      <td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+        <a href="${esc(f.page_url||"")}" target="_blank" style="color:#60a5fa">${esc((f.page_url||"").replace(/^https?:\/\//, "").substring(0, 40))}</a>
+      </td>
+      <td style="font-size:11px;color:rgba(255,255,255,0.35)">${fmtDate(f.timestamp)}</td>
+      <td><span class="badge badge-${f.status}">${f.status}</span></td>
+      <td>
+        ${f.status === "pending" ? `
+          <div class="btn-group">
+            <button class="btn btn-success btn-sm" onclick="feedbackAction('${f.id}','confirm')">✓ Confirm</button>
+            <button class="btn btn-neutral btn-sm" onclick="openEditFromFeedback('${f.id}')">✏ Correct</button>
+            <button class="btn btn-danger btn-sm" onclick="feedbackAction('${f.id}','ignore')">✕ Ignore</button>
+          </div>` : `<span style="color:rgba(255,255,255,0.25);font-size:11px">${f.admin_action || "resolved"}</span>`}
+      </td>
+    </tr>`).join("");
+}
+
+async function feedbackAction(feedbackId, action) {
+  try {
+    await fetch(`/admin/api/feedback/${feedbackId}/action`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action })
+    });
+    showToast(`Feedback ${action === "confirm" ? "confirmed ✓" : "ignored"}`);
+    loadFeedback();
+    loadPaths();
+  } catch (e) { showToast("Error: " + e.message); }
+}
+
+function openEditFromFeedback(feedbackId) {
+  const fb     = allFeedback.find(f => f.id === feedbackId);
+  if (!fb || !fb.path_id) { showToast("No path_id for this feedback."); return; }
+  openEditModal(fb.path_id, feedbackId);
+}
+
+// ── Utils ────────────────────────────────────
+function issueLabel(issue) {
+  return { wrong_element: "Wrong element", element_not_found: "Element not found", wrong_step: "Wrong step" }[issue] || issue;
+}
+
+function fmtDate(iso) {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " " +
+           d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+  } catch { return iso.substring(0, 10); }
+}
+
+function esc(s) {
+  return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2800);
+}
+
+// Close modal on overlay click
+document.getElementById("editModal").addEventListener("click", e => {
+  if (e.target === document.getElementById("editModal")) closeModal();
+});
+</script>
+</body>
+</html>

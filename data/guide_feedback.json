@@ -1,0 +1,24 @@
+[
+  {
+    "id": "800cc77c",
+    "path_id": "",
+    "step_idx": 2,
+    "issue": "element_not_found",
+    "comment": "",
+    "page_url": "https://app.hushly.com/secure/seller/asset/index#/",
+    "timestamp": "2026-04-17T16:35:28.034041",
+    "status": "pending",
+    "admin_action": null
+  },
+  {
+    "id": "7f504261",
+    "path_id": "",
+    "step_idx": 4,
+    "issue": "element_not_found",
+    "comment": "",
+    "page_url": "https://app.hushly.com/secure/seller/asset/index#/",
+    "timestamp": "2026-04-17T16:36:49.680666",
+    "status": "pending",
+    "admin_action": null
+  }
+]

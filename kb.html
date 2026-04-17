@@ -848,6 +848,66 @@
     .no-info-link:hover {
       background: #4338ca;
     }
+    /* ── Guide prompt card ── */
+    .guide-prompt-card {
+      background: linear-gradient(135deg, #1a2235 0%, #243050 100%);
+      border-radius: 16px;
+      padding: 18px;
+      max-width: 90%;
+      box-shadow: 0 4px 16px rgba(30,60,120,0.15);
+      margin-top: 4px;
+    }
+    .guide-card-title {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: rgba(255,255,255,0.45);
+      margin-bottom: 4px;
+    }
+    .guide-card-task {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 16px;
+      line-height: 1.3;
+    }
+    .guide-btns-row {
+      display: flex;
+      gap: 10px;
+    }
+    .guide-choice-btn {
+      flex: 1;
+      padding: 12px 14px;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 3px;
+      transition: all 0.2s;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .guide-choice-btn .btn-icon  { font-size: 20px; margin-bottom: 2px; }
+    .guide-choice-btn .btn-label { font-size: 14px; font-weight: 600; }
+    .guide-choice-btn .btn-desc  { font-size: 11px; opacity: 0.7; }
+    .guide-choice-btn.voice-btn  { background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.3); color: #c4b5fd; }
+    .guide-choice-btn.voice-btn:hover { background: rgba(124,58,237,0.3); transform: translateY(-1px); }
+    .guide-choice-btn.live-btn   { background: rgba(14,165,233,0.15); border: 1px solid rgba(14,165,233,0.3); color: #7dd3fc; }
+    .guide-choice-btn.live-btn:hover  { background: rgba(14,165,233,0.3); transform: translateY(-1px); }
+    /* ── Voice step card ── */
+    .voice-step-card {
+      background: linear-gradient(135deg, #4c1d95 0%, #5b21b6 100%);
+      border-radius: 14px;
+      padding: 16px;
+      max-width: 90%;
+      color: white;
+      margin-top: 4px;
+    }
+    .voice-step-card .step-num  { font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: rgba(255,255,255,0.45); margin-bottom: 6px; }
+    .voice-step-card .step-text { font-size: 14px; line-height: 1.55; font-weight: 500; }
+    .voice-step-card .step-hint { margin-top: 10px; font-size: 12px; color: rgba(255,255,255,0.4); }
   </style>
 </head>
 
@@ -975,10 +1035,11 @@
     let lastInputMethod = "text"; // "text" or "voice"
 
     // ── GUIDED MODE STATE ──
-    let guidedMode = false;
+    // guidedMode: null | 'voice' | 'live' (live has no visual overlay in standalone page)
+    let guidedMode = null;
     let guidedData = null;
     let currentStep = 0;
-    let inGuidePrompt = false; // waiting for user to say "yes" to start guide
+    let inGuidePrompt = false; // waiting for user to choose voice/live guide
 
     // ── Health check — now also reads chunk/vector counts ──
     async function checkServerStatus() {
@@ -1031,6 +1092,7 @@
       recognition = new SpeechRecognition();
       recognition.continuous = false;
       recognition.interimResults = false;
+      recognition.lang = "en-US";
 
       recognition.onstart = () => {
         isListening = true;
@@ -1042,15 +1104,20 @@
         isListening = false;
         micBtn.classList.remove("listening");
         visualizerEl.classList.remove("active");
+        // In voice guide mode, re-open mic after speech settles
+        if (guidedMode === "voice" && !window.speechSynthesis?.speaking) {
+          setTimeout(() => { if (!isListening) { try { recognition.start(); } catch {} } }, 400);
+        }
       };
 
-      recognition.onresult = (event) => {
-        const transcript = event.results[0][0].transcript;
-        inputEl.value = transcript;
-        lastInputMethod = "voice";
-        send(); // Send immediately if voice command
-        lastInputMethod = "text"; // reset back for normal typing
+      recognition.onerror = (e) => {
+        if (e.error !== "aborted" && e.error !== "no-speech") console.warn("STT error:", e.error);
+        isListening = false;
+        micBtn.classList.remove("listening");
+        visualizerEl.classList.remove("active");
       };
+
+      // onresult is set after guide functions are defined (see below)
     }
 
     function toggleMic() {
@@ -1067,36 +1134,56 @@
       }
     }
 
-    function speak(text) {
+    // ── Voice cache (fix Chrome async voice loading bug) ──
+    let cachedVoices = [];
+    function loadVoices() {
       if (!window.speechSynthesis) return;
-      window.speechSynthesis.cancel(); // Stop current speech
+      const v = window.speechSynthesis.getVoices();
+      if (v.length) cachedVoices = v;
+    }
+    loadVoices();
+    if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = loadVoices;
 
-      // Strip markdown syntax for natural reading
-      const cleanText = text.replace(/[*_#`]/g, "");
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-
-      // Try to find a good English voice
-      const voices = window.speechSynthesis.getVoices();
-      utterance.voice = voices.find(v => v.name.includes("Google") && v.name.includes("English")) || voices[0];
-      utterance.rate = 1.05; // Slightly faster
-
-      // Automatically turn mic back on if we are doing a guided flow
-      utterance.onstart = () => {
-        visualizerEl.classList.add("active");
-      };
-
-      utterance.onend = () => {
-        visualizerEl.classList.remove("active");
-        if (guidedMode && recognition && !isListening) {
-          recognition.start();
-        }
-      };
-
-      window.speechSynthesis.speak(utterance);
+    function getBestVoice() {
+      if (!cachedVoices.length) loadVoices();
+      const pref = [
+        v => v.name.includes("Google") && v.name.includes("US English"),
+        v => v.name.includes("Google") && v.name.toLowerCase().includes("english"),
+        v => v.lang === "en-US",
+        v => v.lang.startsWith("en"),
+      ];
+      for (const test of pref) {
+        const found = cachedVoices.find(test);
+        if (found) return found;
+      }
+      return cachedVoices[0] || null;
     }
 
-    // Load voices on page load (Fixes Chrome voice init bug)
-    window.speechSynthesis?.onvoiceschanged?.();
+    function speak(text, onDone) {
+      if (!window.speechSynthesis) { onDone && onDone(); return; }
+      window.speechSynthesis.cancel();
+      // Wait a tick after cancel (Chrome stability fix)
+      setTimeout(() => {
+        const clean = text.replace(/[*_#`~\[\]()]/g, "").replace(/\s+/g, " ").trim();
+        const utterance = new SpeechSynthesisUtterance(clean);
+        utterance.voice = getBestVoice();
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        utterance.onstart = () => visualizerEl.classList.add("active");
+        utterance.onend = () => {
+          visualizerEl.classList.remove("active");
+          onDone && onDone();
+          if (guidedMode && recognition && !isListening) {
+            try { recognition.start(); } catch {}
+          }
+        };
+        utterance.onerror = () => {
+          visualizerEl.classList.remove("active");
+          onDone && onDone();
+        };
+        window.speechSynthesis.speak(utterance);
+      }, 100);
+    }
 
     // ── CHAT LOGIC ──
     function fillInput(btn) { 
@@ -1286,38 +1373,46 @@
 
       const qLower = query.toLowerCase();
 
-      // IF WAITING FOR THEM TO START THE GUIDE
+      // ── Guide prompt: waiting for voice/live choice ──
       if (inGuidePrompt) {
-        if (qLower.match(/yes|yeah|yep|sure|ok|okay|start|guide/)) {
+        if (qLower.match(/voice|speak|talk|audio/)) {
           inGuidePrompt = false;
-          startGuide();
+          removeGuidePromptCard();
+          startVoiceGuide();
           return;
-        } else if (qLower.match(/no|nope|nah|skip/)) {
+        } else if (qLower.match(/live|visual|highlight|show|click|screen/)) {
           inGuidePrompt = false;
-          addBotMsg("Okay, no problem. Let me know if you need anything else!");
+          removeGuidePromptCard();
+          addBotMsg("*(Live Guide requires the Chrome extension. Starting Voice Guide instead.)*");
+          startVoiceGuide();
+          return;
+        } else if (qLower.match(/yes|yeah|yep|sure|ok|okay|start|guide/)) {
+          inGuidePrompt = false;
+          removeGuidePromptCard();
+          startVoiceGuide();
+          return;
+        } else if (qLower.match(/no|nope|nah|skip|cancel/)) {
+          inGuidePrompt = false;
+          removeGuidePromptCard();
+          addBotMsg("Got it! Let me know if you need help with anything else.");
           return;
         }
       }
 
-      // IF ALREADY IN GUIDED MODE, INTERCEPT NAVIGATION COMMANDS (next, back, repeat, stop)
+      // ── Already in guided mode: intercept navigation commands ──
       if (guidedMode && guidedData) {
-        if (qLower.match(/next|done|continue|finished|yes|yep/)) {
-          nextStep();
-          return;
-        } else if (qLower.match(/back|previous/)) {
-          prevStep();
-          return;
-        } else if (qLower.match(/repeat|say that again/)) {
-          readCurrentStep();
-          return;
-        } else if (qLower.match(/stop|cancel|quit/)) {
-          stopGuide();
-          return;
+        if (qLower.match(/\b(next|done|continue|i clicked|finished|yes|yep|got it)\b/)) {
+          nextStep(); return;
+        } else if (qLower.match(/\b(back|previous|go back)\b/)) {
+          prevStep(); return;
+        } else if (qLower.match(/\b(repeat|again|say that again)\b/)) {
+          readCurrentVoiceStep(); return;
+        } else if (qLower.match(/\b(stop|cancel|quit|exit)\b/)) {
+          stopGuide(); return;
         }
-        // If it's a completely unrelated question while in guide mode:
-        // Let it pass through to the RAG backend, and suspend the guide.
-        guidedMode = false;
-        addBotMsg("*(Suspending guide to answer your new question...)*");
+        // Unrelated question — suspend guide
+        guidedMode = null;
+        addBotMsg("*(Guide paused to answer your question)*");
       }
 
       addThinking();
@@ -1369,23 +1464,14 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ answer: answerText })
         });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.is_actionable_task && data.steps && data.steps.length > 0) {
-            guidedData = data;
-            inGuidePrompt = true;
-
-            const promptMsg = `I can guide you through **"${data.task_title}"** step-by-step. Do you want to start the guide?`;
-
-            // Add a custom button inside the message
-            const btnHtml = `<br><br><button onclick="startGuideMsg()" style="background:var(--primary);color:var(--bg);border:none;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:500;margin-top:8px">Start Guide</button>`;
-
-            addBotMsg(promptMsg + btnHtml);
-
-            // If the user last used their voice, speak the offer out loud!
-            if (lastInputMethod === "voice") {
-              speak(`I can guide you through ${data.task_title} step by step. Just say yes to start.`);
-            }
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.is_actionable_task && data.steps && data.steps.length > 0) {
+          guidedData = data;
+          inGuidePrompt = true;
+          showGuidePromptCard(data.task_title);
+          if (lastInputMethod === "voice") {
+            speak(`I can guide you through ${data.task_title} step by step. Say voice guide or live guide to choose.`);
           }
         }
       } catch (e) {
@@ -1393,57 +1479,150 @@
       }
     }
 
-    window.startGuideMsg = () => {
-      // Triggered by the inline button
-      if (inGuidePrompt) {
-        inGuidePrompt = false;
-        addUserMsg("Start Voice guide");
-        startGuide();
-      }
-    };
-
-    function startGuide() {
-      guidedMode = true;
-      currentStep = 0;
-      addBotMsg(`**Guided Mode Started: ${guidedData.task_title}**\n\n*(Say or type "next", "back", "repeat", or "stop")*`);
-      readCurrentStep();
+    function showGuidePromptCard(taskTitle) {
+      hideEmpty();
+      const el = document.createElement("div");
+      el.className = "msg bot";
+      el.id = "guide-prompt-msg";
+      el.innerHTML = `
+        <div class="msg-label-row"><span class="msg-label">Guide Available</span></div>
+        <div class="guide-prompt-card">
+          <div class="guide-card-title">Interactive Guide</div>
+          <div class="guide-card-task">How to: ${escHtml(taskTitle)}</div>
+          <div class="guide-btns-row">
+            <button class="guide-choice-btn voice-btn" onclick="kbStartVoiceGuide()">
+              <span class="btn-icon">🎤</span>
+              <span class="btn-label">Voice Guide</span>
+              <span class="btn-desc">Spoken step-by-step</span>
+            </button>
+            <button class="guide-choice-btn live-btn" onclick="kbStartLiveGuide()">
+              <span class="btn-icon">👆</span>
+              <span class="btn-label">Live Guide</span>
+              <span class="btn-desc">Use Chrome extension</span>
+            </button>
+          </div>
+        </div>`;
+      messagesEl.appendChild(el);
+      scroll();
     }
 
-    function readCurrentStep() {
-      const txt = guidedData.steps[currentStep];
-      const stepText = `**Step ${currentStep + 1} of ${guidedData.steps.length}:** ${txt}`;
-      addBotMsg(stepText);
-      speak(`Step ${currentStep + 1}: ${txt}`);
+    function removeGuidePromptCard() {
+      const el = document.getElementById("guide-prompt-msg");
+      if (el) el.remove();
+    }
+
+    window.kbStartVoiceGuide = () => {
+      inGuidePrompt = false;
+      removeGuidePromptCard();
+      addUserMsg("Start Voice Guide");
+      startVoiceGuide();
+    };
+
+    window.kbStartLiveGuide = () => {
+      inGuidePrompt = false;
+      removeGuidePromptCard();
+      addUserMsg("Start Live Guide");
+      addBotMsg("The **Live Guide** with visual highlights requires the **Hushly Chrome Extension**. Starting **Voice Guide** instead for this standalone page.");
+      startVoiceGuide();
+    };
+
+    function startVoiceGuide() {
+      guidedMode = "voice";
+      currentStep = 0;
+      addBotMsg(`**Voice Guide started: ${guidedData.task_title}**\n\nSay or type **"next"** / **"I clicked"** to advance, **"back"** to go back, **"repeat"** to replay, or **"stop"** to exit.`);
+      readCurrentVoiceStep();
+      if (recognition && !isListening) {
+        setTimeout(() => { try { recognition.start(); } catch {} }, 600);
+      }
+    }
+
+    function readCurrentVoiceStep() {
+      const step = guidedData.steps[currentStep];
+      const text = step.text || step;
+      const total = guidedData.steps.length;
+
+      const el = document.createElement("div");
+      el.className = "msg bot";
+      el.innerHTML = `
+        <div class="msg-label-row"><span class="msg-label">Voice Guide</span></div>
+        <div class="voice-step-card">
+          <div class="step-num">Step ${currentStep + 1} of ${total}</div>
+          <div class="step-text">${escHtml(text)}</div>
+          <div class="step-hint">🎤 Say "next" or "I clicked" to continue</div>
+        </div>`;
+      messagesEl.appendChild(el);
+      scroll();
+
+      speak(`Step ${currentStep + 1}: ${text}`, () => {
+        if (guidedMode === "voice" && recognition && !isListening) {
+          try { recognition.start(); } catch {}
+        }
+      });
     }
 
     function nextStep() {
       currentStep++;
       if (currentStep >= guidedData.steps.length) {
-        guidedMode = false;
+        guidedMode = null;
         const msg = "Task complete! Great job. What else can I help you with?";
         addBotMsg(`🎉 **${msg}**`);
         speak(msg);
       } else {
-        readCurrentStep();
+        readCurrentVoiceStep();
       }
     }
 
     function prevStep() {
-      if (currentStep > 0) {
-        currentStep--;
-        addBotMsg("*(Going back one step)*");
-        readCurrentStep();
-      } else {
-        addBotMsg("*(You are already on the first step)*");
-        readCurrentStep();
-      }
+      if (currentStep > 0) currentStep--;
+      addBotMsg("*(Going back one step)*");
+      readCurrentVoiceStep();
     }
 
     function stopGuide() {
-      guidedMode = false;
+      guidedMode = null;
       inGuidePrompt = false;
-      addBotMsg("*(Guided mode stopped)*");
       window.speechSynthesis?.cancel();
+      if (isListening) { try { recognition?.stop(); } catch {} }
+      addBotMsg("*(Guide stopped. Ask another question whenever you're ready.)*");
+    }
+
+    // Intercept voice commands during guide mode in recognition handler
+    recognition && (recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript.trim();
+      if (guidedMode === "voice") {
+        handleVoiceGuideCommand(transcript);
+      } else if (inGuidePrompt) {
+        handleGuidePromptVoice(transcript);
+      } else {
+        inputEl.value = transcript;
+        lastInputMethod = "voice";
+        send();
+        lastInputMethod = "text";
+      }
+    });
+
+    function handleVoiceGuideCommand(transcript) {
+      const t = transcript.toLowerCase();
+      if (t.match(/\b(next|done|continue|i clicked|finished|ok|okay|yes|yep|got it)\b/)) {
+        nextStep();
+      } else if (t.match(/\b(back|previous|go back)\b/)) {
+        prevStep();
+      } else if (t.match(/\b(repeat|again|say that again)\b/)) {
+        readCurrentVoiceStep();
+      } else if (t.match(/\b(stop|cancel|quit|exit)\b/)) {
+        stopGuide();
+      } else {
+        addBotMsg(`*(Heard: "${escHtml(transcript)}")*\n\nSay **"next"**, **"back"**, **"repeat"**, or **"stop"**.`);
+        speak("Say next to continue, back, repeat, or stop.");
+      }
+    }
+
+    function handleGuidePromptVoice(transcript) {
+      const t = transcript.toLowerCase();
+      if (t.match(/voice|speak/)) { inGuidePrompt = false; removeGuidePromptCard(); startVoiceGuide(); }
+      else if (t.match(/live|visual|highlight/)) { inGuidePrompt = false; removeGuidePromptCard(); addBotMsg("*(Live Guide requires the Chrome extension. Starting Voice Guide instead.)*"); startVoiceGuide(); }
+      else if (t.match(/no|nope|skip|cancel/)) { inGuidePrompt = false; removeGuidePromptCard(); addBotMsg("Got it! Let me know if you need anything else."); }
+      else { inputEl.value = transcript; lastInputMethod = "voice"; send(); lastInputMethod = "text"; }
     }
 
     inputEl.addEventListener("keypress", e => { if (e.key === "Enter") send(); });

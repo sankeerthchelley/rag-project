@@ -1,0 +1,423 @@
+/* ═══════════════════════════════════════════
+   Hushly Live Guide — Injected Overlay Styles
+   These are injected into the target (SaaS app) page.
+   All classes are namespaced with hushly- to avoid conflicts.
+   ═══════════════════════════════════════════ */
+
+#hushly-highlight {
+  position: fixed;
+  z-index: 2147483645;
+  pointer-events: none;
+  border: 3px solid #307fe2;
+  border-radius: 8px;
+  /* Box-shadow creates the dark vignette outside the highlighted area */
+  box-shadow:
+    0 0 0 9999px rgba(0, 0, 0, 0.48),
+    0 0 0 6px rgba(48, 127, 226, 0.25),
+    0 0 24px rgba(48, 127, 226, 0.6);
+  animation: hushly-glow-pulse 1.6s ease-in-out infinite;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#hushly-click-catcher {
+  position: fixed;
+  z-index: 2147483647;
+  cursor: pointer;
+  background: transparent;
+}
+
+#hushly-tooltip {
+  position: fixed;
+  z-index: 2147483646;
+  max-width: 320px;
+  min-width: 220px;
+  background: #1a2235;
+  color: white;
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  line-height: 1.55;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  animation: hushly-tooltip-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+#hushly-tooltip .hushly-step-num {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  margin-bottom: 5px;
+}
+
+#hushly-tooltip .hushly-step-text {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #ffffff;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+#hushly-tooltip .hushly-step-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#hushly-tooltip .hushly-click-arrow {
+  display: inline-block;
+  animation: hushly-arrow-bounce 0.8s ease-in-out infinite alternate;
+  font-size: 13px;
+}
+
+/* ══════════════════════════════════════════
+   Persistent bottom dock — always visible during guide
+   Two sections: top (text) + bottom (actions)
+   ══════════════════════════════════════════ */
+#hushly-floating-panel {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2147483646;
+  width: min(560px, calc(100vw - 32px));
+  background: #13192b;
+  color: white;
+  border-radius: 18px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: 0 12px 48px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.08);
+  animation: hushly-dock-in 0.32s cubic-bezier(0.34, 1.4, 0.64, 1) both;
+  overflow: hidden;
+}
+
+/* ── Top section: meta row + text ── */
+.hushly-dock-top {
+  padding: 14px 16px 12px;
+  position: relative;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+
+.hushly-dock-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.hushly-panel-badge {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  background: rgba(48,127,226,0.18);
+  color: #7dd3fc;
+  padding: 2px 8px;
+  border-radius: 99px;
+  border: 1px solid rgba(48,127,226,0.3);
+}
+
+.hushly-panel-step {
+  font-size: 10.5px;
+  color: rgba(255,255,255,0.3);
+}
+
+/* Close button — top right corner */
+.hushly-dock-close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.25);
+  font-size: 14px;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+  font-family: inherit;
+}
+.hushly-dock-close-btn:hover {
+  color: #f87171;
+  background: rgba(248,113,113,0.1);
+}
+
+/* Text + hint area — overflow hidden for vapor animation */
+.hushly-dock-text-area {
+  overflow: hidden;
+  position: relative;
+  min-height: 40px;
+}
+
+.hushly-panel-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #f1f5f9;
+  line-height: 1.5;
+  margin-bottom: 2px;
+}
+
+.hushly-dock-hint {
+  font-size: 11.5px;
+  color: rgba(255,255,255,0.38);
+}
+
+/* ── Vapor animation on text update ── */
+.hushly-dock-text-area.vapor-out .hushly-panel-text,
+.hushly-dock-text-area.vapor-out .hushly-dock-hint {
+  animation: hushly-vapor-out 0.28s ease-in both;
+}
+.hushly-dock-text-area.vapor-in .hushly-panel-text,
+.hushly-dock-text-area.vapor-in .hushly-dock-hint {
+  animation: hushly-vapor-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Bottom section: action buttons ── */
+.hushly-dock-bottom {
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+/* Status label inside bottom bar */
+.hushly-dock-status {
+  flex: 1;
+  font-size: 11.5px;
+  color: rgba(255,255,255,0.3);
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hushly-dock-status.warn { color: #fbbf24; }
+
+/* Separator line before right-side buttons */
+.hushly-dock-sep {
+  flex: 1;
+}
+
+/* ── Dock buttons ── */
+.hushly-dock-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 13px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: opacity 0.15s, transform 0.1s;
+  flex-shrink: 0;
+}
+.hushly-dock-btn:active { transform: scale(0.96); }
+.hushly-dock-btn:hover  { opacity: 0.88; }
+.hushly-dock-btn:disabled { opacity: 0.35; cursor: default; }
+
+.hushly-dock-btn-back {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.55);
+}
+.hushly-dock-btn-rescan {
+  background: rgba(48,127,226,0.15);
+  border-color: rgba(48,127,226,0.32);
+  color: #7dd3fc;
+}
+.hushly-dock-btn-continue {
+  background: linear-gradient(135deg, #307fe2, #1a5db8);
+  color: white;
+  box-shadow: 0 2px 10px rgba(48,127,226,0.35);
+}
+.hushly-dock-btn-wrong {
+  background: rgba(248,113,113,0.08);
+  border-color: rgba(248,113,113,0.22);
+  color: #f87171;
+}
+
+/* Old panel-done-btn — hide legacy */
+#hushly-floating-panel .hushly-panel-done-btn,
+#hushly-floating-panel .hushly-panel-close-btn { display: none; }
+
+/* Blue pulse dot indicator near target (corner badge) */
+#hushly-pulse-dot {
+  position: fixed;
+  z-index: 2147483646;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+}
+
+#hushly-pulse-dot::before,
+#hushly-pulse-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #307fe2;
+}
+
+#hushly-pulse-dot::after {
+  animation: hushly-dot-ring 1.4s ease-out infinite;
+  opacity: 0;
+}
+
+/* ── Keyframes ── */
+@keyframes hushly-glow-pulse {
+  0%,  100% { box-shadow: 0 0 0 9999px rgba(0,0,0,0.48), 0 0 0 4px rgba(48,127,226,0.2), 0 0 16px rgba(48,127,226,0.5); }
+  50%        { box-shadow: 0 0 0 9999px rgba(0,0,0,0.52), 0 0 0 7px rgba(48,127,226,0.35), 0 0 30px rgba(48,127,226,0.7); }
+}
+
+@keyframes hushly-tooltip-in {
+  from { opacity: 0; transform: scale(0.9) translateY(6px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes hushly-arrow-bounce {
+  from { transform: translateX(0); }
+  to   { transform: translateX(4px); }
+}
+
+@keyframes hushly-dock-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px) scale(0.97); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0)    scale(1); }
+}
+@keyframes hushly-vapor-out {
+  from { opacity: 1; transform: translateY(0);     filter: blur(0px); }
+  to   { opacity: 0; transform: translateY(-14px); filter: blur(3px); }
+}
+@keyframes hushly-vapor-in {
+  from { opacity: 0; transform: translateY(12px); filter: blur(3px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0px); }
+}
+
+@keyframes hushly-dot-ring {
+  0%   { transform: scale(1);   opacity: 0.8; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+/* ── Bouncing directional arrow ── */
+#hushly-arrow {
+  position: fixed;
+  z-index: 2147483647;
+  pointer-events: none;
+  font-size: 32px;
+  line-height: 1;
+  color: #307fe2;
+  filter: drop-shadow(0 0 8px rgba(48,127,226,0.8));
+  font-weight: 900;
+}
+
+#hushly-arrow[data-dir="up"],
+#hushly-arrow[data-dir="down"] {
+  animation: hushly-bounce-v 0.55s ease-in-out infinite alternate;
+}
+#hushly-arrow[data-dir="left"],
+#hushly-arrow[data-dir="right"] {
+  animation: hushly-bounce-h 0.55s ease-in-out infinite alternate;
+}
+
+@keyframes hushly-bounce-v {
+  from { transform: translateY(-8px); }
+  to   { transform: translateY(8px); }
+}
+@keyframes hushly-bounce-h {
+  from { transform: translateX(-8px); }
+  to   { transform: translateX(8px); }
+}
+
+/* ── Tooltip header row ── */
+#hushly-tooltip .hushly-tooltip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+
+/* ── Path status badge ── */
+.hushly-path-badge {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 99px;
+}
+.hushly-path-badge.saved {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+.hushly-path-badge.ai {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+/* ── Tooltip footer + feedback button ── */
+#hushly-tooltip {
+  pointer-events: auto; /* override pointer-events:none for feedback btn */
+}
+
+#hushly-tooltip .hushly-tooltip-footer {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
+.hushly-feedback-btn {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.4);
+  font-size: 10.5px;
+  font-family: inherit;
+  padding: 3px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.hushly-feedback-btn:hover {
+  color: #f87171;
+  border-color: rgba(248,113,113,0.4);
+}
+
+/* ── Tooltip close (✕) button ── */
+.hushly-tooltip-close {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.3);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 0.15s;
+  font-family: inherit;
+}
+.hushly-tooltip-close:hover { color: #f87171; }
+
+/* ── Floating panel close button ── */
+.hushly-panel-close-btn {
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.3);
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 2px;
+  line-height: 1;
+  transition: color 0.15s;
+  font-family: inherit;
+}
+.hushly-panel-close-btn:hover { color: #f87171; }

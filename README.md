@@ -97,6 +97,7 @@ gunicorn app:app --workers 4 --timeout 120 --bind 0.0.0.0:8000
 | `/enhance` | POST | 10/min | Query enhancement/rewriting |
 | `/generate_steps` | POST | 10/min | Extract steps from answer |
 | `/feedback` | POST | 60/min | Submit feedback for evaluation |
+| `/analyze_page` | POST | 10/min | Explain the current live page context |
 
 ### Example: /ask Request
 ```bash
@@ -114,6 +115,33 @@ Response:
   "sources": ["https://hushly.freshdesk.com/..."],
   "titles": ["Asset Upload Guide"],
   "cached": false
+}
+```
+
+### Example: /analyze_page Request
+```bash
+curl -X POST http://localhost:8000/analyze_page \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://app.hushly.com/content/assets", "title": "Content Assets", "page_elements": [{"text": "Assets", "tag": "a"}, {"text": "Upload", "tag": "button"}]}'
+```
+
+Response:
+```json
+{
+  "page_context": "This is the Content Assets management page where you can organize, upload, and manage all your marketing assets including documents, images, and videos.",
+  "key_features": [
+    "Assets Table - Displays all uploaded assets with metadata",
+    "Upload Button - Add new assets to the library",
+    "Search Filter - Find assets by name or type",
+    "Bulk Actions - Select multiple assets for batch operations"
+  ],
+  "navigation_summary": [
+    {"section": "Left Nav Menu", "purpose": "Access to Assets, Experiences, Hubs, and Analytics"},
+    {"section": "Main Table", "purpose": "Displays asset list with name, type, and status"}
+  ],
+  "sources": ["https://hushly.freshdesk.com/..."],
+  "titles": ["Asset Management Guide"],
+  "model_used": "groq"
 }
 ```
 

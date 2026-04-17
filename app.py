@@ -13,6 +13,7 @@ import json
 import os
 import re
 import time
+import uuid
 import urllib.parse
 from datetime import datetime
 from flask_cors import CORS
@@ -319,15 +320,20 @@ def generate_steps():
             return jsonify({"error": "Answer cannot be empty"}), 400
 
         prompt = f"""You are an expert technical writer for the Hushly SaaS platform.
-Read the provided knowledge base answer below. If the answer contains actionable, 
-step-by-step instructions (e.g., "How to upload an asset", "How to configure SSO"), 
-convert it into a strict JSON object. Make each step extremely concise (1 sentence max) 
-and conversational so it can be spoken out loud by a voice assistant.
+Read the provided knowledge base answer below. If the answer contains actionable,
+step-by-step instructions (e.g., "How to upload an asset", "How to configure SSO"),
+convert it into a strict JSON object.
 
-If the answer is purely informational (e.g., "What is ABM?") and does not contain 
+Each step must have:
+- "text": Concise instruction (1 sentence, conversational, suitable to be spoken aloud).
+- "element_hint": The exact label/name of the UI element the user should click on that
+  step (e.g., "Assets", "Upload", "Content", "Save"). Use an empty string if the step
+  does not involve clicking a specific labeled element.
+
+If the answer is purely informational (e.g., "What is ABM?") and does not contain
 clear chronological steps, set "is_actionable_task" to false.
 
-Answer Text: 
+Answer Text:
 {answer_text}
 
 Output Format strictly as JSON:
@@ -335,8 +341,18 @@ Output Format strictly as JSON:
   "is_actionable_task": true,
   "task_title": "Upload an Asset",
   "steps": [
-    "First, click on the left menu and select Content.",
-    "Next, click on Assets and hit the Upload button."
+    {{
+      "text": "First, open the left sidebar menu and click on Content.",
+      "element_hint": "Content"
+    }},
+    {{
+      "text": "Next, click on Assets.",
+      "element_hint": "Assets"
+    }},
+    {{
+      "text": "Finally, click the Upload button and select your file.",
+      "element_hint": "Upload"
+    }}
   ]
 }}
 """
@@ -393,6 +409,424 @@ def feedback():
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+@app.route("/analyze_page", methods=["POST"])
+@limiter.limit("10 per minute")
+def analyze_page():
+    """Analyze a live page and provide context about it using the knowledge base."""
+    try:
+        body = request.json
+        if not body:
+            return jsonify({"error": "Request body is missing"}), 400
+        
+        url = body.get("url", "")
+        title = body.get("title", "")
+        page_elements = body.get("page_elements", [])
+        
+        if not url:
+            return jsonify({"error": "URL is required"}), 400
+        
+        # Extract page path and key identifiers
+        parsed_url = urllib.parse.urlparse(url)
+        path_parts = parsed_url.path.strip('/').split('/')
+        
+        # Build element summary for context
+        element_summary = []
+        for el in page_elements[:30]:  # Top 30 elements
+            text = el.get("text", "")
+            tag = el.get("tag", "")
+            if text and len(text) < 50:
+                element_summary.append(f"[{tag}] {text}")
+        
+        # Build context-rich query for structured output
+        elements_text = ', '.join(element_summary[:20])
+
+        structured_prompt = f"""You are analyzing a Hushly platform page. Based on the page information below, provide a structured summary.
+
+Page URL: {url}
+Page Title: {title}
+Path: {parsed_url.path}
+Visible UI Elements: {elements_text}
+
+Return your analysis in this exact JSON structure:
+{{
+  "page_context": "2-5 sentences explaining what this page is for and its primary purpose",
+  "key_features": [
+    "Feature name - Brief description of what it does",
+    "Feature name - Brief description of what it does"
+  ],
+  "navigation_summary": [
+    {{
+      "section": "Left Nav Menu / Top Bar / Main Content / etc",
+      "purpose": "What this section contains or provides access to (e.g., Access to Assets, Experiences, Hubs, and Analytics)"
+    }},
+    {{
+      "section": "Main Table / Content Area / etc",
+      "purpose": "What data or content is displayed here"
+    }}
+  ]
+}}
+
+Rules:
+- page_context: Maximum 5 lines, conversational tone
+- key_features: 3-5 bullet points describing major interactive elements
+- navigation_summary: Break down the page layout into logical sections with their purposes
+- Use specific element names found in the UI elements list above
+- If this is a forms/listing page, describe what items are typically shown"""
+
+        # Search for relevant knowledge base content
+        results = search(structured_prompt, k=10)
+
+        if not results:
+            return jsonify({
+                "page_context": "This appears to be a page on the Hushly platform, but I don't have specific documentation about it.",
+                "key_features": [],
+                "navigation_summary": [],
+                "no_info": True,
+                "no_info_reason": "page_not_recognized",
+                "sources": [],
+                "titles": []
+            }), 200
+
+        # Generate contextual answer with structured format
+        context_blocks = []
+        for r in results:
+            block = f"[{r['title']}]\n{r['context']}"
+            context_blocks.append(block)
+        context = "\n\n---\n\n".join(context_blocks)
+        context = context[:12000]
+
+        full_prompt = f"""Use the following knowledge base context to answer the question.
+
+{context}
+
+{structured_prompt}
+
+Output strictly as JSON:"""
+
+        # Try Groq first with JSON format
+        try:
+            completion = groq_client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[{"role": "user", "content": full_prompt}],
+                response_format={"type": "json_object"},
+                max_tokens=800,
+                temperature=0.2
+            )
+            answer_text = completion.choices[0].message.content
+            model_used = "groq"
+        except Exception as e:
+            logger.warning(f"Groq structured analysis failed: {e}")
+            # Fallback: generate plain answer
+            answer, model_used = generate_answer(structured_prompt, results)
+            answer_text = json.dumps({
+                "page_context": answer,
+                "key_features": [],
+                "navigation_summary": []
+            })
+
+        # Parse the JSON response
+        try:
+            structured_data = json.loads(answer_text)
+        except json.JSONDecodeError:
+            # If not valid JSON, wrap it
+            structured_data = {
+                "page_context": answer_text,
+                "key_features": [],
+                "navigation_summary": []
+            }
+
+        # Ensure all required fields exist
+        response_data = {
+            "page_context": structured_data.get("page_context", ""),
+            "key_features": structured_data.get("key_features", []),
+            "navigation_summary": structured_data.get("navigation_summary", []),
+            "no_info": "[NO_INFO]" in str(answer_text).upper() or len(structured_data.get("key_features", [])) == 0,
+            "sources": list(dict.fromkeys(r["source"] for r in results)),
+            "titles": list(dict.fromkeys(r["title"] for r in results)),
+            "page_path": parsed_url.path,
+            "model_used": model_used
+        }
+        return jsonify(response_data)
+
+    except Exception as e:
+        logger.error(f"analyze_page error: {e}")
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+# ─────────────────────────────────────────
+# PATH MEMORY STORE — helpers
+# ─────────────────────────────────────────
+DATA_DIR = "data"
+PATHS_FILE  = os.path.join(DATA_DIR, "paths.json")
+GUIDE_FEEDBACK_FILE = os.path.join(DATA_DIR, "guide_feedback.json")
+
+def _load_json(path, default):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    if not os.path.exists(path):
+        return default
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return default
+
+def _save_json(path, data):
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+def _normalize(text):
+    return re.sub(r"[^a-z0-9\s]", "", text.lower()).split()
+
+def _match_path(query, paths):
+    """Return (best_path, score) from stored paths. Threshold 0.30."""
+    q_words = set(_normalize(query))
+    best, best_score = None, 0.0
+    for p in paths.values():
+        if p.get("status") == "ignored":
+            continue
+        keywords = p.get("keywords", [])
+        title_words = _normalize(p.get("task_title", ""))
+        p_words = set(title_words + [w for kw in keywords for w in _normalize(kw)])
+        if not p_words:
+            continue
+        overlap = len(q_words & p_words)
+        score = overlap / max(len(q_words), len(p_words), 1)
+        if score > best_score:
+            best_score = score
+            best = p
+    if best_score >= 0.30:
+        return best, round(best_score, 2)
+    return None, 0.0
+
+# ─────────────────────────────────────────
+# SMART GUIDE — check cache or call LLM
+# ─────────────────────────────────────────
+@app.route("/smart_guide", methods=["POST"])
+@limiter.limit("20 per minute")
+def smart_guide():
+    try:
+        body = request.json or {}
+        query        = body.get("query", "").strip()
+        answer       = body.get("answer", "").strip()
+        page_elements = body.get("page_elements", [])
+
+        if not query:
+            return jsonify({"error": "query required"}), 400
+
+        paths = _load_json(PATHS_FILE, {})
+
+        # ── 1. Check stored paths ──────────────────────
+        matched, score = _match_path(query, paths)
+        if matched:
+            return jsonify({**matched, "from_cache": True, "match_score": score})
+
+        # ── 2. No stored path — need page scan ─────────
+        if not page_elements:
+            return jsonify({"needs_scan": True})
+
+        # ── 3. LLM maps answer steps → page elements ───
+        elements_str = "\n".join(
+            f"[{e['idx']}] {e['tag'].upper()} | \"{e['text'][:50]}\" "
+            f"| aria:\"{e.get('aria_label','')}\" | sel:\"{e.get('selector','')}\""
+            for e in page_elements[:80]
+        )
+
+        prompt = f"""You are a UI guide assistant for the Hushly SaaS platform.
+
+User asked: "{query}"
+
+Knowledge base answer:
+{answer[:800]}
+
+Visible page elements (index | tag | text | aria-label | CSS selector):
+{elements_str}
+
+CRITICAL RULES:
+1. element_text and element_hint MUST be copied VERBATIM from the "text" or "aria:" column above.
+   Do NOT paraphrase. If the page says "Add Asset", write "Add Asset" — never "Create Asset".
+2. Match each KB step to the closest page element. Use element_idx -1 only if no element exists.
+3. The step "text" should say exactly which label to click (use the verbatim label in quotes).
+
+Return strictly as JSON:
+{{
+  "task_title": "short title",
+  "keywords": ["keyword1", "keyword2", "keyword3"],
+  "steps": [
+    {{
+      "text": "Click \\'Content\\' in the left sidebar",
+      "element_idx": 3,
+      "element_text": "Content",
+      "element_hint": "Content",
+      "selector": "<copy the sel: value for that element>",
+      "selector_fallbacks": []
+    }}
+  ]
+}}"""
+
+        completion = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            max_tokens=700,
+            temperature=0.1,
+        )
+        result = json.loads(completion.choices[0].message.content)
+        result["from_cache"] = False
+        result["status"] = "auto"
+        return jsonify(result)
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+# ─────────────────────────────────────────
+# SAVE / UPDATE A GUIDE PATH
+# ─────────────────────────────────────────
+@app.route("/guide/save_path", methods=["POST"])
+@limiter.limit("20 per minute")
+def save_guide_path():
+    try:
+        body = request.json or {}
+        task_title = body.get("task_title", "").strip()
+        keywords   = body.get("keywords", [])
+        steps      = body.get("steps", [])
+
+        if not task_title or not steps:
+            return jsonify({"error": "task_title and steps required"}), 400
+
+        path_id = re.sub(r"[^a-z0-9]+", "-", task_title.lower()).strip("-")
+        paths   = _load_json(PATHS_FILE, {})
+        now     = datetime.now().isoformat()
+
+        if path_id in paths:
+            paths[path_id].update({"steps": steps, "keywords": keywords, "updated_at": now})
+            paths[path_id]["use_count"] = paths[path_id].get("use_count", 0) + 1
+        else:
+            paths[path_id] = {
+                "id": path_id, "task_title": task_title, "keywords": keywords,
+                "steps": steps, "status": "auto",
+                "created_at": now, "updated_at": now,
+                "use_count": 1, "success_count": 0
+            }
+
+        _save_json(PATHS_FILE, paths)
+        return jsonify({"saved": path_id})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ─────────────────────────────────────────
+# GUIDE STEP FEEDBACK
+# ─────────────────────────────────────────
+@app.route("/guide/feedback", methods=["POST"])
+@limiter.limit("30 per minute")
+def guide_step_feedback():
+    try:
+        body = request.json or {}
+        path_id  = body.get("path_id", "")
+        step_idx = body.get("step_idx", -1)
+        issue    = body.get("issue", "wrong_element")
+        comment  = body.get("comment", "")
+        page_url = body.get("page_url", "")
+
+        fb_list = _load_json(GUIDE_FEEDBACK_FILE, [])
+        entry = {
+            "id":        str(uuid.uuid4())[:8],
+            "path_id":   path_id,
+            "step_idx":  step_idx,
+            "issue":     issue,
+            "comment":   comment,
+            "page_url":  page_url,
+            "timestamp": datetime.now().isoformat(),
+            "status":    "pending",
+            "admin_action": None
+        }
+        fb_list.append(entry)
+        _save_json(GUIDE_FEEDBACK_FILE, fb_list)
+
+        # Flag the path so admin knows to review it
+        if path_id:
+            paths = _load_json(PATHS_FILE, {})
+            if path_id in paths and paths[path_id].get("status") != "validated":
+                paths[path_id]["status"] = "flagged"
+                _save_json(PATHS_FILE, paths)
+
+        return jsonify({"logged": entry["id"]})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ─────────────────────────────────────────
+# ADMIN PANEL
+# ─────────────────────────────────────────
+@app.route("/admin")
+def admin_panel():
+    return send_from_directory(".", "admin.html")
+
+@app.route("/admin/api/paths")
+def admin_api_paths():
+    return jsonify(_load_json(PATHS_FILE, {}))
+
+@app.route("/admin/api/feedback")
+def admin_api_feedback():
+    return jsonify(_load_json(GUIDE_FEEDBACK_FILE, []))
+
+@app.route("/admin/api/paths/<path_id>", methods=["POST"])
+def admin_update_path(path_id):
+    try:
+        body  = request.json or {}
+        paths = _load_json(PATHS_FILE, {})
+        if path_id not in paths:
+            return jsonify({"error": "not found"}), 404
+        for field in ("steps", "status", "keywords", "task_title"):
+            if field in body:
+                paths[path_id][field] = body[field]
+        paths[path_id]["updated_at"] = datetime.now().isoformat()
+        _save_json(PATHS_FILE, paths)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/admin/api/feedback/<fid>/action", methods=["POST"])
+def admin_feedback_action(fid):
+    try:
+        body    = request.json or {}
+        action  = body.get("action")          # confirm | correct | ignore
+        new_steps = body.get("steps")
+
+        fb_list = _load_json(GUIDE_FEEDBACK_FILE, [])
+        entry   = next((f for f in fb_list if f["id"] == fid), None)
+        if not entry:
+            return jsonify({"error": "not found"}), 404
+
+        entry["status"]       = "resolved"
+        entry["admin_action"] = action
+        _save_json(GUIDE_FEEDBACK_FILE, fb_list)
+
+        if entry.get("path_id"):
+            paths = _load_json(PATHS_FILE, {})
+            path  = paths.get(entry["path_id"])
+            if path:
+                if action == "confirm":
+                    path["status"] = "validated"
+                elif action == "ignore":
+                    path["status"] = "auto"   # unflag, keep path
+                elif action == "correct" and new_steps:
+                    path["steps"]   = new_steps
+                    path["status"]  = "corrected"
+                    path["updated_at"] = datetime.now().isoformat()
+                _save_json(PATHS_FILE, paths)
+
+        return jsonify({"ok": True})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))

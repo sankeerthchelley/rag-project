@@ -4,38 +4,56 @@ This file tracks the major milestones and technical changes implemented in the H
 
 ---
 
-### [Phase 1] Project Initialization
+### [Phase 1] Project Initialization (Jan 2026)
 - Initialized local Git repository and connected to remote version control.
 - Configured `.gitignore` to exclude environment variables and logs.
 - Established the base Flask framework and FAISS-based retrieval system.
 
-### [Phase 2] Voice UX & Interactive Features
+### [Phase 2] Voice UX & Interactive Features (Feb 2026)
 - **Speech-to-Text & Text-to-Speech**: Integrated browser-native voice pipelines.
 - **Waveform Visualizers**: Added dynamic CSS/JS waveform animations for voice interaction.
 - **Flow Engine**: Developed logic to extract and present chronological steps for actionable tasks.
 - **UI Revamp**: Updated the interface with a glassmorphic, premium "Cyber-Utility" design.
 
-### [Phase 3] Scalability & Deployment
+### [Phase 3] Scalability & Deployment (Feb 2026)
 - **Render Deployment**: Successfully deployed the application to Render cloud services.
 - **OpenRouter Integration**: Switched to OpenRouter as the primary LLM provider to resolve API quota limitations.
 - **Query Enhancement**: Added a `/enhance` endpoint to rewrite vague queries for better search accuracy.
 - **Context Stability**: Restricted conversation history to the last 3 turns to optimize LLM performance and context window usage.
 
-### [Phase 4] Repository Optimization
+### [Phase 4] Repository Optimization (Mar 2026)
 - **Git Cleanup**: Removed large binary `.bin` index files from Git history using `git rm --cached`.
 - **Ignore Rules**: Updated `.gitignore` to permanently prevent tracking of FAISS shards and binary assets.
 
-### [Phase 5] Stability & Production Readiness
+### [Phase 5] Stability & Production Readiness (Mar 2026)
 - **Rate Limiting**: Implemented Flask-Limiter with specific tiers for `/ask`, `/enhance`, and `/feedback`.
 - **Health Checks**: Optimized the `/health` endpoint with a 3s timeout for LLM status checks.
 - **Topic Guardrails**: Added strict list of "Hushly Topics" to prevent the bot from answering off-topic or irrelevant queries.
 - **Injection Protection**: Implemented regex-based protection against prompt injection attacks.
 
-### [Phase 6] LLM Provider Consolidation (Latest)
+### [Phase 6] LLM Provider Consolidation (Apr 2026)
 - **Gemini Removal**: Fully removed Google Gemini API integration to simplify the architecture.
 - **OpenRouter Primary**: Set OpenRouter as the main gateway for all model requests.
 - **Groq Fallback**: Configured Groq as a robust secondary provider to handle failovers gracefully.
 - **API Verification**: Created verification scripts to test API connectivity and model response quality.
 
+### [Phase 7] Page Context Analysis (Apr 2026)
+- **Extension Page Analysis**: Added "Explain This Page" button to the extension popup
+- **Live Page Scanning**: Extension scans visible page elements and sends to backend
+- **Structured Response Format**: Backend returns JSON with three sections:
+  - `page_context`: 2-5 sentences explaining the page purpose
+  - `key_features`: Bullet points describing major interactive elements
+  - `navigation_summary`: Section → Purpose mapping (e.g., "Left Nav Menu → Access to Assets, Experiences, Hubs")
+- **UI Styling**: Beautiful card-based display with sections, icons, and navigation arrows
+
 ---
-*Last updated: April 14, 2026*
+
+*To add a new phase: Copy the template below, increment the phase number, add the date, and list your changes.*
+
+### [Phase N] Your Feature Name (Month YYYY)
+- **Feature 1**: Description of what was implemented.
+- **Feature 2**: Another feature or change.
+
+---
+
+*Last updated: April 17, 2026*
